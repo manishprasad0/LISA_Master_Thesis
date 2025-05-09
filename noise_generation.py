@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
+import scipy as sp
 
 def generate_noise(N, dt, sens_mat, seed=None, verification_plot=False, time_domain_plot = False, plot_lables=None):
     """
@@ -112,3 +113,31 @@ def plot_noise(noises, dt, sens_mat, plot_lables=None):
     plt.grid(True, which='both')
     plt.legend(loc = 'lower left')
     plt.show()
+
+def plot_spectogram(
+        signal,
+        dt,
+        max_frequency = 0.1,
+        min_frequency = 0.0001):
+
+    f_mesh, t_mesh, sig_Z = sp.signal.stft(signal, 1/dt, nperseg=50000/dt)
+    max_frequency_index = np.searchsorted(f_mesh, max_frequency)
+    min_frequency_index = np.searchsorted(f_mesh, min_frequency)
+
+    plt.figure()
+    plt.pcolormesh(t_mesh, f_mesh[min_frequency_index:max_frequency_index], np.log(np.abs(sig_Z[min_frequency_index:max_frequency_index])), shading='gouraud')
+    plt.colorbar()
+    plt.xlabel('time (s)')
+    plt.ylabel('frequency (Hz)')
+    plt.yscale('log')
+    
+    #plt.ylim(min_frequency, 0.05)
+    #from scipy.signal import spectrogram
+    #spectrogram(wave_with_noise[0], fs=1.0/dt, window=('tukey', 0.25), nperseg=None, noverlap=None,mode='psd')
+    #f, t, Sxx = spectrogram(wave_time_domain_with_noise[1], fs=1.0/dt, window=('tukey', 0.25), nperseg=200, mode='magnitude')
+    #plt.pcolormesh(t, f, Sxx, shading='gouraud')
+    #plt.ylabel('Frequency [Hz]')
+    #plt.xlabel('Time [sec]')
+    ##plt.yscale('log')
+    #plt.ylim(1e-4, f[-1])
+    #plt.show()
