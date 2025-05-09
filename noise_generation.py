@@ -49,7 +49,7 @@ def generate_noise(N, dt, sens_mat, seed=None, verification_plot=False, time_dom
             if plot_lables is None:
                 plt.plot(time_vector, noises[i])
             else:
-                plt.plot(time_vector, noises[i], label = plot_lables[i])
+                plt.plot(time_vector, noises[i], label = plot_lables[i].removesuffix('TDISens'))
         plt.xlabel('Time (s)')
         plt.ylabel('Amplitude')
         plt.grid(True)
@@ -58,7 +58,7 @@ def generate_noise(N, dt, sens_mat, seed=None, verification_plot=False, time_dom
 
     return noises
 
-def noise_time_to_freq_domain(noise, dt):
+def noise_time_to_freq_domain(noises, dt):
     """
     Convert the noise from time domain to frequency domain using Welch's method. 
 
@@ -71,11 +71,18 @@ def noise_time_to_freq_domain(noise, dt):
     """
 
     fs = 1/dt
-    win_length = int(len(noise) / 4.5)
+    win_length = int(len(noises[0]) / 4.5)
     window = hann(win_length)
-    
-    # Compute the power spectral density using Welch's method
-    fout, pxxout = welch(noise, window=window, noverlap=0, nfft=None, fs=fs, return_onesided=True)
+
+    fout = []
+    pxxout = []
+    for noise in noises:
+        f, pxx = welch(noise, window=window, noverlap=0, nfft=None, fs=fs, return_onesided=True)
+        fout.append(f)
+        pxxout.append(pxx)
+    fout = np.array(fout)
+    pxxout = np.array(pxxout)
+
     return fout, pxxout
 
 def plot_noise(noises, dt, sens_mat, plot_lables=None):
@@ -88,15 +95,8 @@ def plot_noise(noises, dt, sens_mat, plot_lables=None):
     - sens_mat: Sensitivity matrix 
     - plot_lables: Labels for the plots
     """
-    
-    fout = []
-    pxxout = []
-    for noise in noises:
-        f, pxx = noise_time_to_freq_domain(noise, dt)
-        fout.append(f)
-        pxxout.append(pxx)
-    fout = np.array(fout)
-    pxxout = np.array(pxxout)
+
+    fout, pxxout = noise_time_to_freq_domain(noises, dt)
 
     plt.figure()
     for i in range(len(noises)):
@@ -104,8 +104,8 @@ def plot_noise(noises, dt, sens_mat, plot_lables=None):
             plt.loglog(fout[i], np.sqrt(pxxout[i]))
             plt.loglog(sens_mat.frequency_arr, np.sqrt(sens_mat.sens_mat[i]))
         else:
-            plt.loglog(fout[i], np.sqrt(pxxout[i]), label=plot_lables[i])
-            plt.loglog(sens_mat.frequency_arr, np.sqrt(sens_mat.sens_mat[i]), label = plot_lables[i] + ' Sensitivity')
+            plt.loglog(fout[i], np.sqrt(pxxout[i]), label=plot_lables[i].removesuffix('TDISens'))
+            plt.loglog(sens_mat.frequency_arr, np.sqrt(sens_mat.sens_mat[i]), label = plot_lables[i].removesuffix('TDISens') + ' Model')
         
     plt.xlabel('Frequency (Hz)')
     plt.ylabel(r'ASD [strain$/\sqrt{\mathrm{Hz}}$]')
