@@ -59,7 +59,7 @@ def generate_noise(N, dt, sens_mat, seed=None, verification_plot=False, time_dom
 
     return noises
 
-def noise_time_to_freq_domain(noises, dt):
+def noise_time_to_freq_domain(noises, dt, winow_length_denominotor=4.5):
     """
     Convert the noise from time domain to frequency domain using Welch's method. 
 
@@ -72,7 +72,7 @@ def noise_time_to_freq_domain(noises, dt):
     """
 
     fs = 1/dt
-    win_length = int(len(noises[0]) / 4.5)
+    win_length = int(len(noises[0]) / winow_length_denominotor)
     window = hann(win_length)
 
     fout = []
@@ -114,7 +114,7 @@ def plot_noise(noises, dt, sens_mat, plot_lables=None):
     plt.legend(loc = 'lower left')
     plt.show()
 
-def plot_spectogram(
+def plot_spectrogram(
         signal,
         dt,
         max_frequency = 0.1,
