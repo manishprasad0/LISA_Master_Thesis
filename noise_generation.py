@@ -105,8 +105,8 @@ def plot_noise(noises, dt, sens_mat, plot_lables=None):
             plt.loglog(fout[i], np.sqrt(pxxout[i]))
             plt.loglog(sens_mat.frequency_arr, np.sqrt(sens_mat.sens_mat[i]))
         else:
-            plt.loglog(fout[i], np.sqrt(pxxout[i]), label=plot_lables[i].removesuffix('TDISens'))
-            plt.loglog(sens_mat.frequency_arr, np.sqrt(sens_mat.sens_mat[i]), label = plot_lables[i].removesuffix('TDISens') + ' Model')
+            plt.loglog(fout[i], np.sqrt(pxxout[i]), label=plot_lables[i] + ' Noise')
+            plt.loglog(sens_mat.frequency_arr, np.sqrt(sens_mat.sens_mat[i]), label = plot_lables[i] + ' Model')
         
     plt.xlabel('Frequency (Hz)')
     plt.ylabel(r'ASD [strain$/\sqrt{\mathrm{Hz}}$]')
