@@ -5,18 +5,18 @@ import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
 import scipy as sp
-from lisatools.sensitivity  import SensitivityMatrix, A1TDISens,E1TDISens, T1TDISens, AET1SensitivityMatrix
+from lisatools.sensitivity  import SensitivityMatrix, A1TDISens,E1TDISens, T1TDISens, AET1SensitivityMatrix, get_sensitivity
 
 
-def noise_time_to_freq_domain(noises, dt, winow_length_denominotor=4.5):
+def signal_time_to_freq_domain(signals, dt, winow_length_denominotor=4.5):
     fs = 1/dt
-    win_length = int(len(noises[0]) / winow_length_denominotor)
+    win_length = int(len(signals[0]) / winow_length_denominotor)
     window = hann(win_length)
 
     fout = []
     pxxout = []
-    for noise in noises:
-        f, pxx = welch(noise, window=window, noverlap=0, nfft=None, fs=fs, return_onesided=True)
+    for signal in signals:
+        f, pxx = welch(signal, window=window, noverlap=0, nfft=None, fs=fs, return_onesided=True)
         fout.append(f)
         pxxout.append(pxx)
     fout = np.array(fout)
@@ -45,6 +45,7 @@ class LISASimulator:
         self.signal_f = None
         self.signal_t = None
         self.injected_t = None
+        self.sens_mat = None
 
         # Plotting Labels
         self.plot_labels = ["A", "E", "T"]
@@ -65,7 +66,8 @@ class LISASimulator:
             sens_mat = AET1SensitivityMatrix(self.freq, **sens_kwargs)
         else:
             sens_mat = AET1SensitivityMatrix(self.freq)
-
+        
+        self.sens_mat = sens_mat
         noises = []
         for sens_fn in sens_mat.sens_mat:
             noise = np.fft.irfft(np.random.normal(0.0, np.sqrt(sens_fn))
@@ -127,7 +129,7 @@ class LISASimulator:
         else:
             return self.injected_t
     
-# ---------------------- Plotting Methods ---------------------- #
+    # ---------------------- Plotting Methods ---------------------- #
     def plot_waveform_frequency(self):
         for i in range((self.num_bin)):
             for j, let in enumerate(self.plot_labels):
@@ -137,10 +139,10 @@ class LISASimulator:
         plt.ylabel(r"$\tilde{h}(f)$ (Hz$^{-1/2}$)")
         plt.show()
 
-    def plot_time_series(self, channel=0):
+    def plot_time_series(self, object, channel=0):
         if self.injected_t is None:
             raise ValueError("Run inject_signal() first.")
-        plt.plot(self.time, self.injected_t[channel])
+        plt.plot(self.time, self.object[channel])
         plt.xlabel("Time [s]")
         plt.ylabel("Strain")
         plt.title("Injected Signal in Time Domain")
@@ -168,26 +170,51 @@ class LISASimulator:
         plt.grid(True)
         plt.show()
 
-    def plot_frequency_series(self):
-        if self.injected_f is None:
-            raise ValueError("Run inject_signal() first.")
-        plt.loglog(self.freq, np.abs(self.injected_f))
-        plt.xlabel("Frequency [Hz]")
-        plt.ylabel("Amplitude")
-        plt.title("Injected Signal in Frequency Domain")
-        plt.grid(True)
-        plt.show()
-
-    def plot_time_frequency(self):
+    def plot_time_frequency(self, channel=0, max_freq = 0.1, min_freq = 1e-4):
         if self.injected_t is None:
             raise ValueError("Run inject_signal() first.")
-        from scipy.signal import spectrogram
-        f, t, Sxx = spectrogram(self.injected_t, fs=1/self.dt)
-        plt.pcolormesh(t, f, 10 * np.log10(Sxx + 1e-20), shading='auto', cmap='viridis')
-        plt.ylabel('Frequency [Hz]')
-        plt.xlabel('Time [s]')
-        plt.title('Spectrogram (Time-Frequency Plot)')
-        plt.colorbar(label='Power [dB]')
+
+        f, t, Zxx = sp.signal.stft(self.injected_t[channel], fs=1/self.dt, nperseg=15000)
+        max_freq_idx = np.searchsorted(f, max_freq)
+        min_freq_idx = np.searchsorted(f, min_freq)
+
+        plt.figure()
+        plt.pcolormesh(t, f[min_freq_idx:max_freq_idx], np.abs(Zxx[min_freq_idx:max_freq_idx]), vmin=0, 
+                    vmax= np.max(np.abs(Zxx[min_freq_idx:max_freq_idx]))/10)
         plt.yscale('log')
-        plt.ylim([min(self.freq), max(self.freq)])
+        plt.title('STFT Magnitude')
+        plt.ylabel('Frequency [Hz]')
+        plt.xlabel('Time [sec]')
+        plt.colorbar()
+
+    def plot_spectrogram(
+        self,
+        max_frequency = 0.1,
+        min_frequency = 0.0001):
+
+        f_mesh, t_mesh, sig_Z = sp.signal.stft(self.injected_t, 1/self.dt, nperseg=50000/self.dt)
+        max_frequency_index = np.searchsorted(f_mesh, max_frequency)
+        min_frequency_index = np.searchsorted(f_mesh, min_frequency)
+
+        plt.figure()
+        plt.pcolormesh(t_mesh, f_mesh[min_frequency_index:max_frequency_index], np.log(np.abs(sig_Z[min_frequency_index:max_frequency_index])), shading='gouraud')
+        plt.colorbar()
+        plt.xlabel('time (s)')
+        plt.ylabel('frequency (Hz)')
+        plt.yscale('log')
+
+    def plot_frequency_domain(self, num_channels):
+        if self.injected_t is None:
+            raise ValueError("Run inject_signal() first.")
+        
+        fout, pxxout = signal_time_to_freq_domain(self.injected_t, self.dt)
+        plt.figure()
+        for i in range(num_channels):
+            plt.loglog(fout[i], np.sqrt(pxxout[i]), label=self.plot_labels[i] + ' Channel Signal')
+            plt.loglog(self.sens_mat.frequency_arr, np.sqrt(self.sens_mat.sens_mat[i]), label = self.plot_labels[i] + ' Noise Model')
+            
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel(r'ASD [strain$/\sqrt{\mathrm{Hz}}$]')
+        plt.grid(True, which='both')
+        plt.legend(loc = 'lower left')
         plt.show()
