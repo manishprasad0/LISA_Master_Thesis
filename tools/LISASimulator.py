@@ -6,6 +6,8 @@ from scipy.signal.windows import hann
 from scipy.signal import welch
 import scipy as sp
 from lisatools.sensitivity  import SensitivityMatrix, A1TDISens,E1TDISens, T1TDISens, AET1SensitivityMatrix, get_sensitivity
+from lisatools.analysiscontainer import AnalysisContainer
+from lisatools.datacontainer import DataResidualArray
 
 
 def signal_time_to_freq_domain(signals, dt, winow_length_denominotor=4.5):
@@ -97,6 +99,15 @@ class LISASimulator:
             raise ValueError("Generate both noise and signal in frequency domain first.")
 
         self.injected_t = self.noise_t + self.signal_t
+        
+    def snr_from_lisatools(self):
+        snr_list = []
+        for signal in self.signal_f:
+            data = DataResidualArray(signal, f_arr=self.freq)
+            analysis = AnalysisContainer(data_res_arr=data, sens_mat=self.sens_mat)
+            snr_list.append(analysis.snr())
+        print("SNRs for each injected binary:", snr_list)
+        return snr_list
 
     def __call__(
         self,
