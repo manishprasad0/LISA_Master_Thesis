@@ -26,12 +26,32 @@ def signal_time_to_freq_domain(signals, dt, winow_length_denominotor=4.5):
 
     return fout, pxxout
 
+def get_hh(signal, sens_mat, df, exclude_T_channel=False):
+    """
+    Calculate the squared norm of the signal in the frequency domain, weighted by the sensitivity matrix.
+    Parameters:
+    - signal: The signal in the frequency domain (shape: [num_channels, num_frequencies]).
+    - sens_mat: lisatools.sensitivity.AET1SensitivityMatrix object.
+    - df: Frequency bin width.
+    - exclude_T_channel: If True, exclude the T channel from the calculation.
+    Returns:
+    - hh: The squared norm of the signal, weighted by the sensitivity matrix.
+    """
+    if exclude_T_channel:
+        hh = np.sum(np.abs(signal[:2, :])**2 / sens_mat.sens_mat[:2, :])
+    else:
+        hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
+        
+    return np.sqrt(hh * 4.0 * df)
+
+
 class LISASimulator:
     def __init__(self, Tobs, dt, wave_gen, waveform_kwargs=None):
         self.dt = dt
         self.N = int(Tobs / dt)
         self.Tobs = self.N * dt
         self.freq = np.fft.rfftfreq(self.N, self.dt)
+        self.df = self.freq[1] - self.freq[0]
         if self.freq[0] == 0:
             self.freq[0] = self.freq[1]
 
@@ -46,7 +66,7 @@ class LISASimulator:
         self.noise_t = None
         self.signal_f = None
         self.signal_t = None
-        self.injected_t = None
+        self.signal_with_noise_t = None
         self.sens_mat = None
 
         # Plotting Labels
@@ -98,16 +118,24 @@ class LISASimulator:
         if self.noise_t is None or self.signal_f is None:
             raise ValueError("Generate both noise and signal in frequency domain first.")
 
-        self.injected_t = self.noise_t + self.signal_t
+        self.signal_with_noise_t = self.noise_t + self.signal_t
         
-    def snr_from_lisatools(self):
-        snr_list = []
+    def SNR_optimal_lisatools(self):
+        SNR = []
         for signal in self.signal_f:
             data = DataResidualArray(signal, f_arr=self.freq)
             analysis = AnalysisContainer(data_res_arr=data, sens_mat=self.sens_mat)
-            snr_list.append(analysis.snr())
-        print("SNRs for each injected binary:", snr_list)
-        return snr_list
+            SNR.append(analysis.snr())
+        SNR = np.array(SNR)
+        return SNR
+    
+    def SNR_optimal(self, exclude_T_channel=False):
+        SNR = []
+        for signal in self.signal_f:
+            hh = get_hh(signal, self.sens_mat, self.df, exclude_T_channel=exclude_T_channel)
+            SNR.append(hh)
+        SNR = np.array(SNR)
+        return SNR
 
     def __call__(
         self,
@@ -128,7 +156,7 @@ class LISASimulator:
         - include_sens_kwargs: If True, include stochastic parameters in sensitivity matrix.
         - include_T_channel: If True, include T channel in the injected signal.
         Returns:
-        - injected_t: Signal injected into the noise in time domain.
+        - signal_with_noise_t: Signal injected into the noise in time domain.
         """
 
         self.generate_noise(seed=seed, include_sens_kwargs=include_sens_kwargs)
@@ -136,9 +164,9 @@ class LISASimulator:
         self.inject_signal()
 
         if not include_T_channel:
-            return self.injected_t[:2] # Exclude T channel if not needed
+            return self.signal_with_noise_t[:2] # Exclude T channel if not needed
         else:
-            return self.injected_t
+            return self.signal_with_noise_t
     
     # ---------------------- Plotting Methods ---------------------- #
     def plot_waveform_frequency(self):
@@ -151,7 +179,7 @@ class LISASimulator:
         plt.show()
 
     def plot_time_series(self, object, channel=0):
-        if self.injected_t is None:
+        if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
         plt.plot(self.time, self.object[channel])
         plt.xlabel("Time [s]")
@@ -161,10 +189,10 @@ class LISASimulator:
         plt.show()
 
     def plot_time_series_near_merger(self, channel=0, binary_index=0):
-        if self.injected_t is None:
+        if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
         
-        plt.plot(self.time, self.injected_t[channel])
+        plt.plot(self.time, self.signal_with_noise_t[channel])
         
         if self.num_bin == 1:            
             plt.xlim(self.parameters[-1] - 60*60*2, self.parameters[-1] + 60*60*1)  # self.parameters[-1] = t_ref. 2 hours before and 1 hour after merger
@@ -182,10 +210,10 @@ class LISASimulator:
         plt.show()
 
     def plot_time_frequency(self, channel=0, max_freq = 0.1, min_freq = 1e-4):
-        if self.injected_t is None:
+        if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
 
-        f, t, Zxx = sp.signal.stft(self.injected_t[channel], fs=1/self.dt, nperseg=15000)
+        f, t, Zxx = sp.signal.stft(self.signal_with_noise_t[channel], fs=1/self.dt, nperseg=15000)
         max_freq_idx = np.searchsorted(f, max_freq)
         min_freq_idx = np.searchsorted(f, min_freq)
 
@@ -203,7 +231,7 @@ class LISASimulator:
         max_frequency = 0.1,
         min_frequency = 0.0001):
 
-        f_mesh, t_mesh, sig_Z = sp.signal.stft(self.injected_t, 1/self.dt, nperseg=50000/self.dt)
+        f_mesh, t_mesh, sig_Z = sp.signal.stft(self.signal_with_noise_t, 1/self.dt, nperseg=50000/self.dt)
         max_frequency_index = np.searchsorted(f_mesh, max_frequency)
         min_frequency_index = np.searchsorted(f_mesh, min_frequency)
 
@@ -215,10 +243,10 @@ class LISASimulator:
         plt.yscale('log')
 
     def plot_frequency_domain(self, num_channels):
-        if self.injected_t is None:
+        if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
         
-        fout, pxxout = signal_time_to_freq_domain(self.injected_t, self.dt)
+        fout, pxxout = signal_time_to_freq_domain(self.signal_with_noise_t, self.dt)
         plt.figure()
         for i in range(num_channels):
             plt.loglog(fout[i], np.sqrt(pxxout[i]), label=self.plot_labels[i] + ' Channel Signal')
