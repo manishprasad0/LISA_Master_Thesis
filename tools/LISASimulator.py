@@ -1,15 +1,13 @@
-# Expected LISA Instrumental Noise from the Test Masses and the Optical Metrology Subsystem (OMS)
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
 import scipy as sp
-from lisatools.sensitivity  import SensitivityMatrix, A1TDISens,E1TDISens, T1TDISens, AET1SensitivityMatrix, get_sensitivity
+from lisatools.sensitivity  import SensitivityMatrix, AET1SensitivityMatrix, get_sensitivity
 from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
 
-
+# TODO: MAKE THIS WORK FOR ONE WAVEFORM ONLY
 def signal_time_to_freq_domain(signals, dt, winow_length_denominotor=4.5):
     fs = 1/dt
     win_length = int(len(signals[0]) / winow_length_denominotor)
@@ -42,19 +40,17 @@ def get_hh(signal, sens_mat, df, exclude_T_channel=False):
     else:
         hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
         
-    return np.sqrt(hh * 4.0 * df)
+    return (hh * 4.0 * df)
 
 
 class LISASimulator:
     def __init__(self, Tobs, dt, wave_gen, waveform_kwargs=None):
         self.dt = dt
-        self.N = int(Tobs / dt)
+        self.N = int(int(Tobs / dt)/2)*2
         self.Tobs = self.N * dt
         self.freq = np.fft.rfftfreq(self.N, self.dt)
-        self.df = self.freq[1] - self.freq[0]
-        if self.freq[0] == 0:
-            self.freq[0] = self.freq[1]
-
+        self.df = self.freq[2] - self.freq[1]
+        #self.freq[0] = self.freq[1]
         # Waveform
         self.parameters = None
         self.modes = None
@@ -67,6 +63,7 @@ class LISASimulator:
         self.signal_f = None
         self.signal_t = None
         self.signal_with_noise_t = None
+        self.signal_with_noise_f = None
         self.sens_mat = None
 
         # Plotting Labels
@@ -103,6 +100,8 @@ class LISASimulator:
 
     def generate_waveform(self, parameters, modes, waveform_kwargs):
         self.parameters = parameters
+        if self.parameters.ndim == 1:
+            self.parameters = np.array([self.parameters]).T
         self.modes = modes
         self.num_bin = parameters.ndim
         self.signal_f = self.wave_gen(*parameters, freqs=self.freq, modes=modes, **waveform_kwargs)
@@ -119,6 +118,7 @@ class LISASimulator:
             raise ValueError("Generate both noise and signal in frequency domain first.")
 
         self.signal_with_noise_t = self.noise_t + self.signal_t
+        self.signal_with_noise_f = np.fft.rfft(self.signal_with_noise_t, axis=-1)
         
     def SNR_optimal_lisatools(self):
         SNR = []
@@ -133,7 +133,7 @@ class LISASimulator:
         SNR = []
         for signal in self.signal_f:
             hh = get_hh(signal, self.sens_mat, self.df, exclude_T_channel=exclude_T_channel)
-            SNR.append(hh)
+            SNR.append(np.sqrt(hh))
         SNR = np.array(SNR)
         return SNR
 
@@ -242,6 +242,7 @@ class LISASimulator:
         plt.ylabel('frequency (Hz)')
         plt.yscale('log')
 
+    # TODO: MAKE THIS WORK FOR ONE WAVEFORM ONLY
     def plot_frequency_domain(self, num_channels):
         if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
