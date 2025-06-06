@@ -22,14 +22,11 @@ def get_hh(signal, sens_mat, df, exclude_T_channel=False):
     Returns:
     - hh: The squared norm of the signal, weighted by the sensitivity matrix.
     """
-    if exclude_T_channel:
-        hh = np.sum(np.abs(signal[:2, :])**2 / sens_mat.sens_mat[:2, :])
-    else:
-        hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
+    hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
         
     return (hh * 4.0 * df)
 
-def get_dh(data, template, sens_mat, df, exclude_T_channel=False):
+def get_dh(data, template, sens_mat, df):
     """
     Calculate the inner product of the data with the template in the frequency domain, weighted by the sensitivity matrix.
     Parameters:
@@ -41,10 +38,7 @@ def get_dh(data, template, sens_mat, df, exclude_T_channel=False):
     Returns:
     - dh: The inner product of the data with the template, weighted by the sensitivity matrix.
     """
-    if exclude_T_channel:
-        dh = np.sum(data[:2, :] * np.conj(template[:2, :]) / sens_mat.sens_mat[:2, :])
-    else:
-        dh = np.sum(data * np.conj(template) / sens_mat.sens_mat)
+    dh = np.sum(data * np.conj(template) / sens_mat.sens_mat)
         
     return (np.real(dh) * 4.0 * df)
 

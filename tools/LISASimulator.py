@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
 import scipy as sp
-from lisatools.sensitivity  import SensitivityMatrix, AET1SensitivityMatrix, get_sensitivity
+from lisatools.sensitivity  import AE1SensitivityMatrix, AET1SensitivityMatrix, get_sensitivity
 from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
 
@@ -35,22 +35,21 @@ def get_hh(signal, sens_mat, df, exclude_T_channel=False):
     Returns:
     - hh: The squared norm of the signal, weighted by the sensitivity matrix.
     """
-    if exclude_T_channel:
-        hh = np.sum(np.abs(signal[:2, :])**2 / sens_mat.sens_mat[:2, :])
-    else:
-        hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
+    hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
         
     return (hh * 4.0 * df)
 
 
 class LISASimulator:
-    def __init__(self, Tobs, dt, wave_gen, waveform_kwargs=None):
+    def __init__(self, Tobs, dt, wave_gen, include_T_channel, waveform_kwargs=None):
         self.dt = dt
         self.N = int(int(Tobs / dt)/2)*2
         self.Tobs = self.N * dt
         self.freq = np.fft.rfftfreq(self.N, self.dt)
         self.df = self.freq[2] - self.freq[1]
-        #self.freq[0] = self.freq[1]
+        self.freq[0] = self.freq[1]
+        self.include_T_channel = include_T_channel
+
         # Waveform
         self.parameters = None
         self.modes = None
@@ -80,11 +79,18 @@ class LISASimulator:
         if seed is not None:
             np.random.seed(seed)
 
-        if include_sens_kwargs:
-            sens_kwargs = dict(stochastic_params=(self.Tobs,))
-            sens_mat = AET1SensitivityMatrix(self.freq, **sens_kwargs)
+        if self.include_T_channel:
+            if include_sens_kwargs:
+                sens_kwargs = dict(stochastic_params=(self.Tobs,))
+                sens_mat = AET1SensitivityMatrix(self.freq, **sens_kwargs)
+            else:
+                sens_mat = AET1SensitivityMatrix(self.freq)
         else:
-            sens_mat = AET1SensitivityMatrix(self.freq)
+            if include_sens_kwargs:
+                sens_kwargs = dict(stochastic_params=(self.Tobs,))
+                sens_mat = AE1SensitivityMatrix(self.freq, **sens_kwargs)
+            else:
+                sens_mat = AE1SensitivityMatrix(self.freq)
         
         self.sens_mat = sens_mat
         noises = []
@@ -105,7 +111,10 @@ class LISASimulator:
         self.modes = modes
         self.num_bin = parameters.ndim
         self.signal_f = self.wave_gen(*parameters, freqs=self.freq, modes=modes, **waveform_kwargs)
-
+        
+        if self.include_T_channel == False: 
+            self.signal_f = self.signal_f[:, :2, :]  
+        
         signal_t = np.fft.irfft(self.signal_f, axis=-1)
 
         if self.num_bin == 1:
@@ -116,7 +125,7 @@ class LISASimulator:
     def inject_signal(self):
         if self.noise_t is None or self.signal_f is None:
             raise ValueError("Generate both noise and signal in frequency domain first.")
-
+        print('3', self.noise_t.shape, self.signal_t.shape)
         self.signal_with_noise_t = self.noise_t + self.signal_t
         self.signal_with_noise_f = np.fft.rfft(self.signal_with_noise_t, axis=-1)
         
@@ -144,7 +153,7 @@ class LISASimulator:
         modes=None,
         waveform_kwargs=None, 
         include_sens_kwargs=False,
-        include_T_channel=True
+        #include_T_channel=True
         ):
         """
         Main method to generate noise, waveform, and inject the signal.
@@ -162,13 +171,15 @@ class LISASimulator:
         self.generate_noise(seed=seed, include_sens_kwargs=include_sens_kwargs)
         self.generate_waveform(parameters=parameters, modes=modes, waveform_kwargs=waveform_kwargs)
         self.inject_signal()
-
-        if not include_T_channel:
-            return self.signal_with_noise_t[:2] # Exclude T channel if not needed
-        else:
-            return self.signal_with_noise_t
+        
+        return self.signal_with_noise_t
+        #if not include_T_channel:
+       #     return self.signal_with_noise_t[:2] # Exclude T channel if not needed
+       # else:
+        #    return self.signal_with_noise_t
     
     # ---------------------- Plotting Methods ---------------------- #
+    # TODO: MAKE THIS WORK FOR ONE WAVEFORM ONLY
     def plot_waveform_frequency(self):
         for i in range((self.num_bin)):
             for j, let in enumerate(self.plot_labels):
