@@ -74,3 +74,20 @@ def SNR_optimal_lisatools(self):
             SNR.append(analysis.snr())
         SNR = np.array(SNR)
         return SNR
+
+def inner_product_time_frequency(signal_1, signal_2, sens_mat, df, nperseg):
+    """
+    Calculate the inner product of two signals in the time-frequency domain, weighted by the sensitivity matrix.
+    Parameters:
+    - signal_1: The first signal in the time domain
+    - signal_2: The second signal in the time domain
+    - sens_mat: lisatools.sensitivity object.
+    - df: Frequency bin width.
+    Returns:
+    - ip: The inner product of the two signals, weighted by the sensitivity matrix.
+    """
+
+    f_1, t_1, Z_1 = sp.signal.stft(signal_1, fs=df, nperseg=nperseg*df)
+    f_2, t_2, Z_2 = sp.signal.stft(signal_2, fs=df, nperseg=nperseg*df)
+
+    

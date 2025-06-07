@@ -189,13 +189,17 @@ class LISASimulator:
         plt.ylabel(r"$\tilde{h}(f)$ (Hz$^{-1/2}$)")
         plt.show()
 
-    def plot_time_series(self, object, channel=0):
+    def plot_time_series(self, channel=0, near_merger=False, before_merger=60*30*1, after_merger=60*30*1):
         if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
-        plt.plot(self.time, self.object[channel])
+        plt.plot(self.time, self.noise_t[channel], label='Noise')
+        plt.plot(self.time, self.signal_t[0][channel], label='Signal')
+        if near_merger:
+            plt.xlim(self.parameters[-1] - before_merger, self.parameters[-1] + after_merger)
         plt.xlabel("Time [s]")
         plt.ylabel("Strain")
         plt.title("Injected Signal in Time Domain")
+        plt.legend()
         plt.grid(True)
         plt.show()
 
@@ -203,15 +207,16 @@ class LISASimulator:
         if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
         
-        plt.plot(self.time, self.signal_with_noise_t[channel])
+        plt.plot(self.time, self.signal_with_noise_t[0][channel])
+        #plt.plot(self.time, self.signal_with_noise_t[self.num_bin-1][channel])
         
-        if self.num_bin == 1:            
-            plt.xlim(self.parameters[-1] - 60*60*2, self.parameters[-1] + 60*60*1)  # self.parameters[-1] = t_ref. 2 hours before and 1 hour after merger
-            plt.axvline(self.parameters[-1], color='k', linestyle='--', label='t_ref')
+        #if self.num_bin == 1:            
+        plt.xlim(self.parameters[-1] - 60*60*2, self.parameters[-1] + 60*60*1)  # self.parameters[-1] = t_ref. 2 hours before and 1 hour after merger
+        plt.axvline(self.parameters[-1], color='k', linestyle='--', label='t_ref')
 
-        else:
-            plt.xlim(self.parameters[-1][binary_index] - 60*60*2, self.parameters[-1][binary_index] + 60*60*1)
-            plt.axvline(self.parameters[-1][binary_index], color='k', linestyle='--', label='t_ref')
+        #else:
+        #    plt.xlim(self.parameters[-1][binary_index] - 60*60*2, self.parameters[-1][binary_index] + 60*60*1)
+        #    plt.axvline(self.parameters[-1][binary_index], color='k', linestyle='--', label='t_ref')
         
         plt.xlabel("Time [s]")
         plt.ylabel("Strain")
@@ -224,7 +229,7 @@ class LISASimulator:
         if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
 
-        f, t, Zxx = sp.signal.stft(self.signal_with_noise_t[channel], fs=1/self.dt, nperseg=15000)
+        f, t, Zxx = sp.signal.stft(self.signal_with_noise_t[0][channel], fs=1/self.dt, nperseg=15000)
         max_freq_idx = np.searchsorted(f, max_freq)
         min_freq_idx = np.searchsorted(f, min_freq)
 
