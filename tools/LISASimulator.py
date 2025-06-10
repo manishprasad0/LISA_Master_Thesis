@@ -7,6 +7,21 @@ from lisatools.sensitivity  import AE1SensitivityMatrix, AET1SensitivityMatrix, 
 from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
 
+def get_hh(signal, sens_mat, df, exclude_T_channel=False):
+    """
+    Calculate the squared norm of the signal in the frequency domain, weighted by the sensitivity matrix.
+    Parameters:
+    - signal: The signal in the frequency domain (shape: [num_channels, num_frequencies]).
+    - sens_mat: lisatools.sensitivity.AET1SensitivityMatrix object.
+    - df: Frequency bin width.
+    - exclude_T_channel: If True, exclude the T channel from the calculation.
+    Returns:
+    - hh: The squared norm of the signal, weighted by the sensitivity matrix.
+    """
+    hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
+        
+    return (hh * 4.0 * df)
+
 # TODO: MAKE THIS WORK FOR ONE WAVEFORM ONLY
 def signal_time_to_freq_domain(signals, dt, winow_length_denominotor=4.5):
     fs = 1/dt
@@ -23,23 +38,7 @@ def signal_time_to_freq_domain(signals, dt, winow_length_denominotor=4.5):
     pxxout = np.array(pxxout)
 
     return fout, pxxout
-
-def get_hh(signal, sens_mat, df, exclude_T_channel=False):
-    """
-    Calculate the squared norm of the signal in the frequency domain, weighted by the sensitivity matrix.
-    Parameters:
-    - signal: The signal in the frequency domain (shape: [num_channels, num_frequencies]).
-    - sens_mat: lisatools.sensitivity.AET1SensitivityMatrix object.
-    - df: Frequency bin width.
-    - exclude_T_channel: If True, exclude the T channel from the calculation.
-    Returns:
-    - hh: The squared norm of the signal, weighted by the sensitivity matrix.
-    """
-    hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
-        
-    return (hh * 4.0 * df)
-
-
+    
 class LISASimulator:
     def __init__(self, Tobs, dt, wave_gen, include_T_channel, waveform_kwargs=None):
         self.dt = dt
@@ -125,7 +124,7 @@ class LISASimulator:
     def inject_signal(self):
         if self.noise_t is None or self.signal_f is None:
             raise ValueError("Generate both noise and signal in frequency domain first.")
-        print('3', self.noise_t.shape, self.signal_t.shape)
+        #print('3', self.noise_t.shape, self.signal_t.shape)
         self.signal_with_noise_t = self.noise_t + self.signal_t
         self.signal_with_noise_f = np.fft.rfft(self.signal_with_noise_t, axis=-1)
         
@@ -172,7 +171,7 @@ class LISASimulator:
         self.generate_waveform(parameters=parameters, modes=modes, waveform_kwargs=waveform_kwargs)
         self.inject_signal()
         
-        return self.signal_with_noise_t
+        return self.signal_with_noise_t[0], self.signal_with_noise_f[0], self.freq, self.time, self.sens_mat.sens_mat
         #if not include_T_channel:
        #     return self.signal_with_noise_t[:2] # Exclude T channel if not needed
        # else:
@@ -258,12 +257,11 @@ class LISASimulator:
         plt.ylabel('frequency (Hz)')
         plt.yscale('log')
 
-    # TODO: MAKE THIS WORK FOR ONE WAVEFORM ONLY
     def plot_frequency_domain(self, num_channels):
         if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
         
-        fout, pxxout = signal_time_to_freq_domain(self.signal_with_noise_t, self.dt)
+        fout, pxxout = signal_time_to_freq_domain(self.signal_with_noise_t[0], self.dt)
         plt.figure()
         for i in range(num_channels):
             plt.loglog(fout[i], np.sqrt(pxxout[i]), label=self.plot_labels[i] + ' Channel Signal')
