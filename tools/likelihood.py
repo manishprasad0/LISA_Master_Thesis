@@ -11,7 +11,7 @@ from lisatools.datacontainer import DataResidualArray
 # for the LISASimulator class, h (or the variable 'signal') is the injected signal in the simulated LISA data.
 # for the LogLikelihood class, h (or the variable 'signal') is the template signal in the frequency domain.
 
-def get_hh(signal, sens_mat, df, exclude_T_channel=False):
+def get_hh(data, sens_mat, df):
     """
     Calculate the squared norm of the signal in the frequency domain, weighted by the sensitivity matrix.
     Parameters:
@@ -22,7 +22,7 @@ def get_hh(signal, sens_mat, df, exclude_T_channel=False):
     Returns:
     - hh: The squared norm of the signal, weighted by the sensitivity matrix.
     """
-    hh = np.sum(np.abs(signal)**2 / sens_mat.sens_mat)
+    hh = np.sum(np.abs(data)**2 / sens_mat.sens_mat)
         
     return (hh * 4.0 * df)
 
@@ -42,7 +42,7 @@ def get_dh(data, template, sens_mat, df):
         
     return (np.real(dh) * 4.0 * df)
 
-def template_snr(data, template, sens_mat, df, exclude_T_channel=False):
+def template_snr(data, template, sens_mat, df):
     """
     Calculate the signal-to-noise ratio (SNR) of a template against the data in the frequency domain.
     Parameters:
@@ -54,8 +54,8 @@ def template_snr(data, template, sens_mat, df, exclude_T_channel=False):
     Returns:
     - snr: The SNR of the template against the data.
     """
-    hh = get_hh(template, sens_mat, df, exclude_T_channel)
-    dh = get_dh(data, template, sens_mat, df, exclude_T_channel)
+    hh = get_hh(template, sens_mat, df)
+    dh = get_dh(data, template, sens_mat, df)
     
     return dh / np.sqrt(hh)
 
