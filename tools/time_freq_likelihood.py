@@ -12,13 +12,13 @@ from typing import Any, Tuple, Optional, List
 # RIGHT NOW MAKING THIS ONLY FOR A AND E CHANNELS, NOT T CHANNEL
 # class TimeFreqLikelihood is like the AnalysisContainer class in lisatools, but it is specifically designed for time-frequency likelihood calculations.
 class TimeFreqLikelihood:
-    def __init__(self, data_t, wave_gen, dt):
+    def __init__(self, data_t, wave_gen, dt, nperseg = 15000):
         self.data_t = data_t
         self.wave_gen = wave_gen
         
         # stft
         self.dt = dt
-        self.nperseg = 15000  # default value, can be changed later
+        self.nperseg = nperseg  # default value, can be changed later
         self.f = None
         self.t = None
         self.Zxx_data_A = None
@@ -34,6 +34,7 @@ class TimeFreqLikelihood:
         self.f[0] = self.f[1]  # set the first frequency to the second frequency to avoid division by zero
         
         self.t = t
+        self.dt = t[1] - t[0]
 
         self.Zxx_data_A = Zxx_data_A
         self.Zxx_data_E = Zxx_data_E
@@ -44,14 +45,21 @@ class TimeFreqLikelihood:
         else:
             self.sens_mat_new = AE1SensitivityMatrix(self.f).sens_mat
 
+    def get_dd(self):
+        # Calculate the inner product for A and E channels
+        inner_product_A = np.abs(self.Zxx_data_A)**2 / self.sens_mat_new[0][:, np.newaxis]
+        inner_product_E = np.abs(self.Zxx_data_E)**2 / self.sens_mat_new[1][:, np.newaxis]
+
+        return 4 * self.df * np.sum(inner_product_A.real + inner_product_E.real)
+
     def get_hh(self, Zxx_A, Zxx_E):
-        weighted_power_A = np.abs(Zxx_A)**2 / self.sens_mat_new[0][:, np.newaxis]
-        weighted_power_E = np.abs(Zxx_E)**2 / self.sens_mat_new[1][:, np.newaxis]
+        inner_product_A = np.abs(Zxx_A)**2 / self.sens_mat_new[0][:, np.newaxis]
+        inner_product_E = np.abs(Zxx_E)**2 / self.sens_mat_new[1][:, np.newaxis]
         
-        return 4 * self.df * np.sum(weighted_power_A + weighted_power_E)
+        return 4 * self.df * np.sum(inner_product_A + inner_product_E)
     
     def get_dh(self, Zxx_A, Zxx_E):
-        inner_product_A = (Zxx_A * np.conj(self.Zxx_data_A)) / self.sens_mat_new[0][:, np.newaxis]  # shape (n_freq, n_time)
+        inner_product_A = (Zxx_A * np.conj(self.Zxx_data_A)) / self.sens_mat_new[0][:, np.newaxis] 
         inner_product_E = (Zxx_E * np.conj(self.Zxx_data_E)) / self.sens_mat_new[1][:, np.newaxis]
 
         return 4 * self.df * np.sum(inner_product_A.real + inner_product_E.real)
@@ -62,6 +70,7 @@ class TimeFreqLikelihood:
         waveform_kwargs: Optional[dict] = {},
         **kwargs: dict,
     ):
+        parameters
         template_f = self.wave_gen(*parameters, **waveform_kwargs)[0]
         template_f = template_f[:2] # remove T channel
         template_t = np.fft.irfft(template_f, axis=-1)
@@ -72,5 +81,6 @@ class TimeFreqLikelihood:
         # Calculate the inner product for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
+        dd = self.get_dd()
 
-        return dh - hh / 2.0
+        return (dh - hh / 2.0 - dd / 2.0) * self.dt
