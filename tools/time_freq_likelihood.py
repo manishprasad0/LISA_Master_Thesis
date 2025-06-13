@@ -12,12 +12,12 @@ from typing import Any, Tuple, Optional, List
 # RIGHT NOW MAKING THIS ONLY FOR A AND E CHANNELS, NOT T CHANNEL
 # class TimeFreqLikelihood is like the AnalysisContainer class in lisatools, but it is specifically designed for time-frequency likelihood calculations.
 class TimeFreqLikelihood:
-    def __init__(self, data_t, wave_gen, dt, nperseg = 15000):
+    def __init__(self, data_t, wave_gen, nperseg = 15000):
         self.data_t = data_t
         self.wave_gen = wave_gen
         
         # stft
-        self.dt = dt
+        self.dt = None
         self.nperseg = nperseg  # default value, can be changed later
         self.f = None
         self.t = None
@@ -25,9 +25,15 @@ class TimeFreqLikelihood:
         self.Zxx_data_E = None
         self.sens_mat_new = None
     
-    def get_stft_of_data(self, include_sens_kwargs=False):
-        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt, nperseg=self.nperseg)
-        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt, nperseg=self.nperseg)
+    def get_stft_of_data(self, dt=5.0, include_sens_kwargs=False):
+        """
+        Calculate the Short-Time Fourier Transform (STFT) of the data and set up the frequency and time arrays.
+        Parameters:
+        - dt: Time step for the data, default is 5.0 seconds. Different from self.dt which is the time step for the STFT.
+        - include_sens_kwargs: If True, include sensitivity matrix parameters in the sensitivity matrix calculation.
+        """
+        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/dt, nperseg=self.nperseg)
+        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/dt, nperseg=self.nperseg)
         
         self.f = f
         self.df = f[1] - f[0]  # frequency bin width

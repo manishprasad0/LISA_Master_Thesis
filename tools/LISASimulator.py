@@ -45,7 +45,7 @@ class LISASimulator:
         self.N = int(int(Tobs / dt)/2)*2
         self.Tobs = self.N * dt
         self.freq = np.fft.rfftfreq(self.N, self.dt)
-        self.df = self.freq[2] - self.freq[1]
+        self.df = self.freq[2] - self.freq[1]           # df is almost constant. Variation at order 10^-17. Check (np.diff(self.freq)[1:]) - self.df
         self.freq[0] = self.freq[1]
         self.include_T_channel = include_T_channel
 
@@ -224,11 +224,11 @@ class LISASimulator:
         plt.grid(True)
         plt.show()
 
-    def plot_time_frequency(self, channel=0, max_freq = 0.1, min_freq = 1e-4):
+    def plot_time_frequency(self, channel=0, max_freq = 0.1, min_freq = 1e-4, nperseg=15000):
         if self.signal_with_noise_t is None:
             raise ValueError("Run inject_signal() first.")
 
-        f, t, Zxx = sp.signal.stft(self.signal_with_noise_t[0][channel], fs=1/self.dt, nperseg=15000)
+        f, t, Zxx = sp.signal.stft(self.signal_with_noise_t[0][channel], fs=1/self.dt, nperseg=nperseg)
         max_freq_idx = np.searchsorted(f, max_freq)
         min_freq_idx = np.searchsorted(f, min_freq)
 
