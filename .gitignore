@@ -5,4 +5,5 @@ testing_noise.ipynb
 testing_spectogram.ipynb
 LATW_tutorials/tutorial_answers
 LATW_tutorials/bbhx_tuorial.ipynb
+*.pkl
 mcmc
