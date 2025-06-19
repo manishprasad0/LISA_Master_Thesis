@@ -106,7 +106,7 @@ class TimeFreqLikelihood:
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
         dd = self.get_dd()
 
-        return (dh - hh / 2.0 - dd / 2.0) * self.dt
+        return (dh - hh / 2.0 - dd / 2.0)
 
     def plot_spectrogram(self, max_freq = 0.1, min_freq = 1e-4):
 
