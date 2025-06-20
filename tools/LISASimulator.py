@@ -103,13 +103,12 @@ class LISASimulator:
         self.noise_t = noises
         self.time = np.arange(len(self.noise_t[0])) * self.dt
 
-    def generate_waveform(self, parameters, modes, waveform_kwargs):
+    def generate_waveform(self, parameters, waveform_kwargs):
         self.parameters = parameters
         if self.parameters.ndim == 1:
             self.parameters = np.array([self.parameters]).T
-        self.modes = modes
         self.num_bin = parameters.ndim
-        self.signal_f = self.wave_gen(*parameters, freqs=self.freq, modes=modes, **waveform_kwargs)
+        self.signal_f = self.wave_gen(*parameters, freqs=self.freq, **waveform_kwargs)
         
         if self.include_T_channel == False: 
             self.signal_f = self.signal_f[:, :2, :]  
@@ -168,7 +167,7 @@ class LISASimulator:
         """
 
         self.generate_noise(seed=seed, include_sens_kwargs=include_sens_kwargs)
-        self.generate_waveform(parameters=parameters, modes=modes, waveform_kwargs=waveform_kwargs)
+        self.generate_waveform(parameters=parameters, waveform_kwargs=waveform_kwargs)
         self.inject_signal()
         
         return self.signal_with_noise_t[0], self.signal_with_noise_f[0], self.freq, self.time, self.sens_mat.sens_mat
