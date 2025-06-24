@@ -14,139 +14,32 @@ from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
 from typing import Any, Tuple, Optional, List
 
-class TimeFreqSNR:
-    def __init__(self, data_t, wave_gen, cutoff_index, nperseg = 15000, dt_full=5.0, pre_merger=False):
-        self.data_t = data_t
-        self.wave_gen = wave_gen
-        self.dt_full = dt_full  # This is the time step for the full data, not the STFT
-        self.time_before_merger = None
-        self.cutoff_index = cutoff_index  # Index to truncate the data before merger
-        self.pre_merger = pre_merger  # Flag to indicate if the data is pre-merger
 
-        # All the following quantities are for after the STFT is calculated
-        self.dt = None
-        self.nperseg = nperseg  # default value, can be changed later
-        self.f = None
-        self.t = None
-        self.Zxx_data_A = None
-        self.Zxx_data_E = None
-        self.sens_mat_new = None
-        self.dd = None
-    
-    def get_stft_of_data(self, include_sens_kwargs=False):
-        """
-        Calculate the Short-Time Fourier Transform (STFT) of the data and set up the frequency and time arrays.
-        Parameters:
-        - dt: Time step for the data, default is 5.0 seconds. Different from self.dt which is the time step for the STFT.
-        - include_sens_kwargs: If True, include sensitivity matrix parameters in the sensitivity matrix calculation.
-        """
-        
-        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
-        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
-        
-        self.f = f
-        self.df = f[1] - f[0]  # frequency bin width
-        self.f[0] = self.f[1]  # set the first frequency to the second frequency to avoid division by zero
-        
-        self.t = t
-        self.dt = t[1] - t[0]
+def transform_to_bbhx_parameters(x: np.ndarray) -> np.ndarray:
+    """
+    Transform parameters to BBHX format. 
+    - x: array of 11 parameters: [mT, q, a1, a2, dL, phi, cos(i), lambda, sin(beta), psi, t_ref]
+    Returns 
+    - all_parameters: an array of 12 parameters (input for bbhx): [m1, m2, a1, a2, dL, phi, f_ref, i, lambda, beta, psi, t_ref]
+    """
 
-        self.Zxx_data_A = Zxx_data_A
-        self.Zxx_data_E = Zxx_data_E
+    all_parameters = np.zeros(12)
+    mT = x[0]
+    q = x[1]
+    all_parameters[0] = mT / (1 + q)
+    all_parameters[1] = mT * q / (1 + q)
+    all_parameters[2] = x[2]
+    all_parameters[3] = x[3]
+    all_parameters[4] = x[4] * PC_SI * 1e6
+    all_parameters[5] = x[5]
+    all_parameters[6] = 0.0
+    all_parameters[7] = np.arccos(x[6])
+    all_parameters[8] = x[7]
+    all_parameters[9] = np.arcsin(x[8])
+    all_parameters[10] = x[9]
+    all_parameters[11] = x[10]
+    return all_parameters
 
-        if include_sens_kwargs:
-            sens_kwargs = dict(stochastic_params=(self.Tobs,))
-            self.sens_mat_new = AE1SensitivityMatrix(self.f, **sens_kwargs).sens_mat
-        else:
-            self.sens_mat_new = AE1SensitivityMatrix(self.f).sens_mat
-
-    def get_hh(self, Zxx_A, Zxx_E):
-        inner_product_A = np.abs(Zxx_A)**2 / self.sens_mat_new[0][:, np.newaxis]
-        inner_product_E = np.abs(Zxx_E)**2 / self.sens_mat_new[1][:, np.newaxis]
-        
-        return 4 * self.df * np.sum(inner_product_A + inner_product_E)
-    
-    def get_dh(self, Zxx_A, Zxx_E):
-        inner_product_A = (Zxx_A * np.conj(self.Zxx_data_A)) / self.sens_mat_new[0][:, np.newaxis] 
-        inner_product_E = (Zxx_E * np.conj(self.Zxx_data_E)) / self.sens_mat_new[1][:, np.newaxis]
-
-        return 4 * self.df * np.sum(inner_product_A.real + inner_product_E.real)
-    
-    def calculate_time_frequency_SNR(
-        self,
-        *parameters: Any,
-        waveform_kwargs: Optional[dict] = {},
-        **kwargs: dict,
-    ):
-        template_f = self.wave_gen(*parameters,  **waveform_kwargs)[0]
-        template_f = template_f[:2] # remove T channel
-        template_t = np.fft.irfft(template_f, axis=-1)
-
-        if self.pre_merger:
-            # Truncate the template to the same length as the data
-            template_t = template_t[:, :self.cutoff_index]
-
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
-
-        # Calculate the inner product for A and E channels
-        hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
-        dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
-        amplitude = dh/hh
-
-        return  dh / np.sqrt(hh), amplitude
-
-
-
-
-def transform_to_parameters(params01, boundaries, parameters_sample):
-    one_dim = False
-    if params01.ndim == 1:
-        one_dim = True
-        params01 = np.array([params01])
-    params = np.zeros_like(params01)
-    for i, parameter in enumerate(parameters_sample):
-        if parameter in ['EclipticLatitude']:
-            params[:,i] = np.arcsin(params01[:,i] * (boundaries[parameter][1] - boundaries[parameter][0]) + boundaries[parameter][0])
-        elif parameter in ['Inclination']:
-            params[:,i] = np.arccos(params01[:,i] * (boundaries[parameter][1] - boundaries[parameter][0]) + boundaries[parameter][0])
-        elif parameter in ['TotalMass']:
-            params[:,i] = 10**(params01[:,i] * (boundaries[parameter][1] - boundaries[parameter][0]) + boundaries[parameter][0])
-        else:
-            params[:,i] = params01[:,i] * (boundaries[parameter][1] - boundaries[parameter][0]) + boundaries[parameter][0]
-    m1 = params[:,0] * params[:,1] / (1 + params[:,1])
-    m2 = params[:,0] / (1 + params[:,1])
-    params[:,0] = m1
-    params[:,1] = m2
-    if one_dim:
-        params = params[0]
-    return params
-
-def transform_to_01(params, boundaries, parameters_sample):
-    one_dim = False
-    if params.ndim == 1:
-        one_dim = True
-        params = np.array([params])
-    params01 = np.zeros_like(params)
-    M = params[:,0] + params[:,1]
-    q = params[:,0] / params[:,1]
-    for i, parameter in enumerate(parameters_sample):
-        if parameter in ['EclipticLatitude']:
-            params01[:,i] = (np.sin(params[:,i]) - boundaries[parameter][0]) / (boundaries[parameter][1] - boundaries[parameter][0])
-        elif parameter in ['Inclination']:
-            params01[:,i] = (np.cos(params[:,i]) - boundaries[parameter][0]) / (boundaries[parameter][1] - boundaries[parameter][0])
-        elif parameter in ['TotalMass']:
-            params01[:,i] = (np.log10(M) - boundaries[parameter][0]) / (boundaries[parameter][1] - boundaries[parameter][0])
-        elif parameter in ['MassRatio']:
-            params01[:,i] = (q - boundaries[parameter][0]) / (boundaries[parameter][1] - boundaries[parameter][0])
-        else:
-            params01[:,i] = (params[:,i] - boundaries[parameter][0]) / (boundaries[parameter][1] - boundaries[parameter][0])
-    if one_dim:
-        params01 = params01[0]
-    return params01
-
-def add_f_ref_to_parameters(params11, f_ref=0.0):
-    return list(params11[:6]) + [f_ref] + list(params11[6:])
 
 class MBHB_finder:
     def __init__(self, data_t, wave_gen, cutoff_index, waveform_kwargs, boundaries, nperseg = 15000, dt_full=5.0, pre_merger=False):
@@ -207,7 +100,7 @@ class MBHB_finder:
     
     def calculate_time_frequency_SNR(
         self,
-        *parameters: Any,
+        parameters: Any,
     ):
         template_f = self.wave_gen(*parameters, **self.waveform_kwargs)[0]
         template_f = template_f[:2] # remove T channel
@@ -230,20 +123,26 @@ class MBHB_finder:
 
     def calculate_time_frequency_SNR_without_distance(
         self,
-        params01: Any,
+        parameters: Any,
     ):
-        params01_with_distance = np.zeros(len(params01)+1)
-        params01_with_distance[:4] = params01[:4]
-        params01_with_distance[4] = 0.5                 # FIXING THE DISTANCE TO 0.5 Gpc FOR DIFFERENTIAL EVOLUTION.
-        params01_with_distance[5:] = params01[4:]
+        """ Calculate the time-frequency SNR without distance parameter.
+        - parameters: 10 parameters. f_ref = 0.0 added inside the function and distance is set to the middle of the range.
+        The reason is that the function optimized by differential evolution needs to only have the parameters that are optimized,
+        Since distance does not affect the SNR, it is set to a constant value.
+        f_ref = 0.0 is added to the parameters to be compatible with the waveform generator. 
+        Returns:
+        - -SNR: the negative SNR value, as we want to minimize the SNR.
+        """
+        params = np.zeros(len(parameters) + 2)  # +2 for f_ref and distance
+        params[:4] = parameters[:4]                                                                                             # mT, q, a1, a2
+        params[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])    # dL
+        params[5] = parameters[4]                                                                                               # phase                   
+        params[6] = 0.0                                                                                                         # f_ref is set to 0.0
+        params[7:] = parameters[5:]                                                                                             # phi, cos(i), lambda, sin(beta), psi, t_ref
 
-        params = transform_to_parameters(params01_with_distance, self.boundaries, self.parameters_sample)
+        parameters_bbhx = transform_to_bbhx_parameters(params)
 
-        params = add_f_ref_to_parameters(params, f_ref=0.0)  # Add f_ref to the parameters
-
-
-
-        template_f = self.wave_gen(*params, **self.waveform_kwargs)[0]
+        template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
         template_f = template_f[:2] # remove T channel
         template_t = np.fft.irfft(template_f, axis=-1)
 
@@ -259,7 +158,7 @@ class MBHB_finder:
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
         #amplitude = dh/hh
 
-        return - dh / np.sqrt(hh)
+        return - dh / np.sqrt(hh) # Return the negative SNR value, as we want to minimize the SNR
     
 
     def calculate_amplitude(self, *parameters: Any):
