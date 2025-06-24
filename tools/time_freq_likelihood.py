@@ -26,6 +26,7 @@ class TimeFreqLikelihood:
         self.Zxx_data_A = None
         self.Zxx_data_E = None
         self.sens_mat_new = None
+        self.dd = None
 
     def pre_merger(self, time_before_merger, t_ref, t_array):
         self.time_before_merger = time_before_merger
@@ -63,6 +64,8 @@ class TimeFreqLikelihood:
             self.sens_mat_new = AE1SensitivityMatrix(self.f, **sens_kwargs).sens_mat
         else:
             self.sens_mat_new = AE1SensitivityMatrix(self.f).sens_mat
+
+        self.dd = self.get_dd()
 
     def get_dd(self):
         # Calculate the inner product for A and E channels
@@ -104,9 +107,7 @@ class TimeFreqLikelihood:
         # Calculate the inner product for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
-        dd = self.get_dd()
-
-        return (dh - hh / 2.0 - dd / 2.0) * self.dt
+        return (dh - hh / 2.0 - self.dd / 2.0) * self.dt
 
     def plot_spectrogram(self, max_freq = 0.1, min_freq = 1e-4):
 

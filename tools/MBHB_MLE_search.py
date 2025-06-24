@@ -227,7 +227,7 @@ class MBHB_finder():
     def get_SNR_from01_Lframe_without_distance(self, params01):
         params01_with_distance = cp.zeros(len(params01)+1)
         params01_with_distance[:4] = params01[:4]
-        params01_with_distance[4] = 0.5
+        params01_with_distance[4] = 0.5                 # FIXING THE DISTANCE TO 0.5 Gpc FOR DIFFERENTIAL EVOLUTION.
         params01_with_distance[5:] = params01[4:]
         params = transform_to_parameters(params01_with_distance, self.boundaries, self.parameters_sample)
 
