@@ -62,6 +62,7 @@ def template_snr(data, template, sens_mat, df):
 
 def template_snr_lisatools(data, template, sens_mat, freq):
     template = DataResidualArray(template, f_arr=freq)
+    data = DataResidualArray(data, f_arr=freq)
     analysis = AnalysisContainer(data_res_arr=data, sens_mat=sens_mat)
     return analysis.template_inner_product(template=template)
 

@@ -181,7 +181,7 @@ class LISASimulator:
     def plot_waveform_frequency(self):
         for i in range((self.num_bin)):
             for j, let in enumerate(self.plot_labels):
-                plt.loglog(self.freq, np.abs(self.signal_f[i][j]), label=let + f" bin {i}")
+                plt.loglog(self.freq, np.abs(self.signal_f[i-1][j]), label=let + f" bin {i}")
         plt.legend()
         plt.xlabel("Frequency (Hz)")
         plt.ylabel(r"$\tilde{h}(f)$ (Hz$^{-1/2}$)")
