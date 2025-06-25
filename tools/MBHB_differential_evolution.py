@@ -1,5 +1,4 @@
 from bbhx.utils.constants import *
-from bbhx.utils.transform import *
 import numpy as np
 import scipy as sp
 import xarray as xr
@@ -12,7 +11,7 @@ import matplotlib.pyplot as plt
 from lisatools.sensitivity  import SensitivityMatrix, AET1SensitivityMatrix, get_sensitivity, AE1SensitivityMatrix
 from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
-from typing import Any, Tuple, Optional, List
+from typing import Any, Tuple, Optional, List, Dict
 
 # variable names:
 
@@ -49,16 +48,16 @@ def transform_to_bbhx_parameters(x_11: np.ndarray) -> np.ndarray:
 
 
 class MBHB_finder:
-    def __init__(self, data_t, wave_gen, cutoff_index, waveform_kwargs, boundaries, nperseg = 15000, dt_full=5.0, pre_merger=False):
+    def __init__(self, data_t, wave_gen, waveform_kwargs, boundaries, nperseg = 15000, dt_full=5.0, pre_merger=False, cutoff_index=None):
         self.data_t = data_t
         self.wave_gen = wave_gen
-        self.dt_full = dt_full  # This is the time step for the full data, not the STFT
-        self.cutoff_index = cutoff_index  # Index to truncate the data before merger
-        self.pre_merger = pre_merger  # Flag to indicate if the data is pre-merger
+        self.dt_full = dt_full                  # This is the time step for the full data, not the STFT
+        self.cutoff_index = cutoff_index        # Index to truncate the data before merger
+        self.pre_merger = pre_merger            # Flag to indicate if the data is pre-merger
 
         # All the following quantities are for after the STFT is calculated
         self.dt = None
-        self.nperseg = nperseg  # default value, can be changed later
+        self.nperseg = nperseg
         self.f = None
         self.t = None
         self.Zxx_data_A = None
@@ -68,7 +67,10 @@ class MBHB_finder:
 
         # waveform kwargs
         self.waveform_kwargs = waveform_kwargs
-        self.boundaries = boundaries  # boundaries for the 11 parameters including distance as a dictionary.
+        self.boundaries = boundaries                            # boundaries for the 11 parameters including distance as a dictionary.
+        self.parameter_names = list(self.boundaries.keys())     # List of parameter names from the boundaries dictionary
+
+
         # Other stuff
 #self.parameters_sample = ['TotalMass', 'MassRatio', 'Spin1', 'Spin2', 'Distance', 'Phase', 'Inclination', 'EclipticLongitude', 'EclipticLatitude', 'Polarization', 'CoalescenceTime']
     
@@ -103,49 +105,6 @@ class MBHB_finder:
         inner_product_E = (Zxx_E * np.conj(self.Zxx_data_E)) / self.sens_mat_new[1][:, np.newaxis]
 
         return 4 * self.df * np.sum(inner_product_A.real + inner_product_E.real)
-
-    def calculate_time_frequency_SNR_without_distance(
-        self,
-        parameters_10: np.ndarray,
-    ) -> float:
-        """ Calculate the time-frequency SNR without distance parameter.
-        - parameters_10: [mT,  q, a1, a2, phi, cos(i), lambda, sin(beta), psi, t_ref]
-
-        The reason is that the function optimized by differential evolution needs to only have the parameters that are optimized,
-        Since distance does not affect the SNR, it is set to a constant value.
-        f_ref = 0.0 is added to the parameters in the function transform_to_bbhx_parameters to be compatible with the waveform generator. 
-        
-        Returns:
-        - -SNR: the negative SNR value, as we want to minimize the SNR.
-        """
-
-        # Add distance parameter to the parameters_10 and set it to the middle of the range
-        parameters_11 = np.zeros(len(parameters_10) + 1)  # +2 for f_ref and distance
-        parameters_11[:4] = parameters_10[:4]                                                                                           # mT, q, a1, a2
-        parameters_11[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])     # dL = mid point of the distance prior
-        parameters_11[5:] = parameters_10[4:]                                                                                           # phase, phi, cos(i), lambda, sin(beta), psi, t_ref
-
-        # Transform to BBHX parameters
-        parameters_bbhx = transform_to_bbhx_parameters(parameters_11)
-
-        # Generate the waveform template with parameters_bbhx and remove the T channel
-        template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
-        template_f = template_f[:2] # remove T channel
-        template_t = np.fft.irfft(template_f, axis=-1)
-
-        # Truncate the template to the same length as the data i.e. pre-merger
-        if self.pre_merger:
-            template_t = template_t[:, :self.cutoff_index]
-
-        # Calculate the STFT of the template
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
-
-        # Calculate the inner products for A and E channels
-        hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
-        dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
-
-        return - dh / np.sqrt(hh) # Return the negative SNR value, as we want to minimize the SNR
 
     def calculate_amplitude(self, parameters_11: Any):
 
@@ -202,69 +161,133 @@ class MBHB_finder:
 
         # Return the normal/positive SNR value as we are not optimizing this function
         return dh / np.sqrt(hh) 
+    
+    def calculate_time_frequency_SNR_without_distance(
+        self,
+        variable_parameters: np.ndarray,
+        fixed_parameters: Optional[Dict[str, Any]] = None,
+    ) -> float:
+        """ Calculate the time-frequency SNR without distance parameter.
+        - variable_parameters: array of 10 parameters: [mT,  q, a1, a2, phi, cos(i), lambda, sin(beta), psi, t_ref]
+        - fixed_parameters: dictionary of fixed parameters, e.g. {'Distance': 1e6} where 1e6 is the distance in parsecs.
 
-    def find_MBHB(self, strategy='best1exp', popsize=10, tol=1e-8, maxiter=500, recombination=1, mutation=(0.5, 1), polish=True, disp=False, workers=-1):
+        parameters_10: [mT,  q, a1, a2, phi, cos(i), lambda, sin(beta), psi, t_ref]
+        The reason is that the function optimized by differential evolution needs to only have the parameters that are optimized,
+        Since distance does not affect the SNR, it is set to a constant value.
+        f_ref = 0.0 is added to the parameters in the function transform_to_bbhx_parameters to be compatible with the waveform generator. 
+        
+        Returns:
+        - -SNR: the negative SNR value, as we want to minimize the SNR.
+        """
+        if fixed_parameters is None:
+            fixed_parameters = {list(self.boundaries.items())[4][0] : list(self.boundaries.items())[4][1][0] + 0.5 * (list(self.boundaries.items())[4][1][1] - list(self.boundaries.items())[4][1][0])}
 
+        parameters_11 = []
+        free_idx = 0
+        for name in self.parameter_names:
+            if name in fixed_parameters:
+                parameters_11.append(fixed_parameters[name])
+            else:
+                parameters_11.append(variable_parameters[free_idx])
+                free_idx += 1
+        parameters_11 = np.array(parameters_11)
+        
+        """
+        # Add distance parameter to the parameters_10 and set it to the middle of the range
+        parameters_11 = np.zeros(len(parameters_10) + 1)  # +1 for f_ref and distance
+        parameters_11[:4] = parameters_10[:4]                                                                                           # mT, q, a1, a2
+        parameters_11[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])     # dL = mid point of the distance prior
+        parameters_11[5:] = parameters_10[4:]                                                                                           # phase, phi, cos(i), lambda, sin(beta), psi, t_ref
+        """
+        
+        # Transform to BBHX parameters
+        parameters_bbhx = transform_to_bbhx_parameters(parameters_11)
+
+        # Generate the waveform template with parameters_bbhx and remove the T channel
+        template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
+        template_f = template_f[:2] # remove T channel
+        template_t = np.fft.irfft(template_f, axis=-1)
+
+        # Truncate the template to the same length as the data i.e. pre-merger
+        if self.pre_merger:
+            template_t = template_t[:, :self.cutoff_index]
+
+        # Calculate the STFT of the template
+        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
+
+        # Calculate the inner products for A and E channels
+        hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
+        dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
+
+        return - dh / np.sqrt(hh) # Return the negative SNR value, as we want to minimize the SNR
+
+    def find_MBHB(self, 
+                  differential_evolution_kwargs = None, 
+                  fixed_parameters: Optional[Dict[str, Any]] = None):
+
+        if fixed_parameters is None:
+            fixed_parameters = {list(self.boundaries.items())[4][0] : list(self.boundaries.items())[4][1][0] + 0.5 * (list(self.boundaries.items())[4][1][1] - list(self.boundaries.items())[4][1][0])}
+
+
+        free_param_names = [name for name in self.parameter_names if name not in fixed_parameters]
+        bounds = np.array([self.boundaries[name] for name in free_param_names])
+        initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
+
+
+
+        """
         # make an array of the boundaries from the boundaries dictionary
-        boundaries_array = np.array(list(self.boundaries.values()))
+        boundaries_array  = np.array(list(self.boundaries.values()))
         
         # remove the distance parameter from the boundaries array as it is set to a constant value. Distance is later calculated from the amplitude.
         boundaries_without_distance = np.delete(boundaries_array, 4, axis=0)
 
         # draw an initial guess from the boundaries without distance
         initial_guess_without_distance = np.random.uniform(low=boundaries_without_distance[:, 0], high=boundaries_without_distance[:, 1])
+        """
 
         time_start = time.time()
-        SNR = self.calculate_time_frequency_SNR_without_distance(initial_guess_without_distance)
-        print('time SNR ',np.round(time.time() - time_start,2))
-        print('initial guess', SNR)
-        time_start = time.time()
+        #SNR = self.calculate_time_frequency_SNR_without_distance(initial_guess_without_distance)
+        #print('time SNR ',np.round(time.time() - time_start,2))
+        #print('initial guess', SNR)
+        #time_start = time.time()
 
-        results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,            # The function only takes 10 parameters (all except dL & f_ref)
-                                                                bounds=boundaries_without_distance,                 # Bounds for the 10 parameters (all except dL & f_ref)
-                                                                x0=initial_guess_without_distance,                  # Initial guess for the 10 parameters (all except dL & f_ref) 
-                                                                strategy=strategy,                                  # Strategy for the differential evolution
-                                                                popsize=popsize,                                    # Population size
-                                                                tol=tol,                                            # Tolerance for convergence
-                                                                maxiter=maxiter,                                    # Maximum number of iterations
-                                                                recombination=recombination,                        # Recombination factor
-                                                                mutation=mutation,                                  # Mutation factor
-                                                                polish=polish,                                      # Whether to polish the result
-                                                                disp=disp,                                          # Whether to display the progress
-                                                                workers=workers,                                    # Number of workers for parallel processing. -1 = use all cores
-                                                                )
+        results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance, # The function only takes 10 parameters (all except dL & f_ref)
+                                                     bounds=bounds,                 # Bounds for the 10 parameters (all except dL & f_ref)
+                                                     x0=initial_guess_without_distance,                  # Initial guess for the 10 parameters (all except dL & f_ref) 
+                                                     args=(fixed_parameters,),
+                                                     **differential_evolution_kwargs,                    # Additional keyword arguments for the differential evolution algorithm
+                                                    )
         
+     
         print('time DE ',np.round(time.time() - time_start,2))
         print(results)
 
         function_evaluations = results.nfev
-        found_parameters_10 = results.x
+        found_parameters_10  = results.x
+        
+        found_parameters = {}
+        free_idx = 0
 
+        for name in self.parameter_names:
+            if name in fixed_parameters:
+                found_parameters[name] = fixed_parameters[name]
+            else:
+                found_parameters[name] = results.x[free_idx]
+                free_idx += 1
+
+        found_parameters_11 = np.array([found_parameters[name] for name in self.parameter_names])
+        """
         # Add the distance to the found parameters. Distance is set to the middle of the range.
         found_parameters_11 = np.zeros(len(found_parameters_10)+1)
         found_parameters_11[:4] = found_parameters_10[:4]
         found_parameters_11[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])
         found_parameters_11[5:] = found_parameters_10[4:]
-    
+        """
         # Calculate the amplitude factor and normalize the distance parameter to get the true distance MLE
         amplitude_factor = self.calculate_amplitude(found_parameters_11)
         found_parameters_11[4] /= amplitude_factor
 
         print(found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11))
-        return found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11), function_evaluations
-
-"""
-def find_MBHB_in_data(start_time, end_time):
-    boundaries = {}
-    boundaries['Spin1'] = [-1, 1]
-    boundaries['Spin2'] = [-1, 1]
-    boundaries['Distance'] = [500*PC_SI*1e6, 1e6*PC_SI*1e6]
-    boundaries['Phase'] = [-np.pi, np.pi]
-    boundaries['Inclination'] = [-1, 1]
-    boundaries['EclipticLongitude'] = [0, 2*np.pi]
-    boundaries['EclipticLatitude'] = [-1, 1]
-    boundaries['Polarization'] = [0, np.pi]
-    boundaries['CoalescenceTime'] = [start_time, end_time]  
-    boundaries['TotalMass'] = [1e5, 1e6]
-    boundaries['MassRatio'] = [1, 10]
-"""
+        return found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11), function_evaluations, results
