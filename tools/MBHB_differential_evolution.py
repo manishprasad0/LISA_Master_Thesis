@@ -21,7 +21,7 @@ from typing import Any, Tuple, Optional, List, Dict
 # results.x is same as parameters_10 i.e. transformed parameters without distance and f_ref
 
 
-def transform_to_bbhx_parameters(x_11: np.ndarray) -> np.ndarray:
+def transform_parameters_to_bbhx(x_11: np.ndarray) -> np.ndarray:
     """
     Transform parameters to BBHX format. 
     - x: array of 11 parameters: [mT, q, a1, a2, dL/(PC_SI * 1e6), phi, cos(i), lambda, sin(beta), psi, t_ref]
@@ -46,9 +46,28 @@ def transform_to_bbhx_parameters(x_11: np.ndarray) -> np.ndarray:
     all_parameters[11] = x_11[10]
     return all_parameters
 
+def transform_bbhx_to_parameters(x: np.ndarray) -> np.ndarray:
+    """ Transform parameters to a format that can be used for analysis.
+    - x: array of 12 true parameters: [m1, m2, a1, a2, dL, phi, f_ref, i, lambda, beta, psi, t_ref]
+    Returns
+    - all_parameters: an array of 11 parameters: [mT, q, a1, a2, dL/(PC_SI * 1e6), phi, cos(i), lambda, sin(beta), psi, t_ref]
+    """
+    all_parameters = np.zeros(11)
+    all_parameters[0] = x[0] + x[1]
+    all_parameters[1] = x[1] / x[0]
+    all_parameters[2] = x[2]
+    all_parameters[3] = x[3]
+    all_parameters[4] = x[4] / (PC_SI * 1e6)
+    all_parameters[5] = x[5]
+    all_parameters[6] = np.cos(x[7]) # neglecting f_ref as it is not used in the analysis by jumping directly to x[7]
+    all_parameters[7] = x[8]
+    all_parameters[8] = np.sin(x[9])
+    all_parameters[9] = x[10]
+    all_parameters[10] = x[11]
+    return all_parameters
 
 class MBHB_finder:
-    def __init__(self, data_t, wave_gen, waveform_kwargs, boundaries, nperseg = 15000, dt_full=5.0, pre_merger=False, cutoff_index=None):
+    def __init__(self, data_t, wave_gen, waveform_kwargs, boundaries, nperseg = 15000, dt_full=5.0, pre_merger=False, cutoff_index=None, true_parameters=None):
         self.data_t = data_t
         self.wave_gen = wave_gen
         self.dt_full = dt_full                  # This is the time step for the full data, not the STFT
@@ -70,10 +89,42 @@ class MBHB_finder:
         self.boundaries = boundaries                            # boundaries for the 11 parameters including distance as a dictionary.
         self.parameter_names = list(self.boundaries.keys())     # List of parameter names from the boundaries dictionary
 
+        # Initialize found parameters and true parameters
+        self.true_parameters = true_parameters
 
-        # Other stuff
-#self.parameters_sample = ['TotalMass', 'MassRatio', 'Spin1', 'Spin2', 'Distance', 'Phase', 'Inclination', 'EclipticLongitude', 'EclipticLatitude', 'Polarization', 'CoalescenceTime']
-    
+    def __str__(self):
+        if self.true_parameters is None:
+            raise ValueError("True parameters are not set. Please provide true parameters to the MBHB_finder instance.")
+        
+        from io import StringIO
+        buffer = StringIO()
+
+        # Write the table header
+        buffer.write(f"{'Index':<5} {'Parameter':<25} {'Lower Bound':<15} {'Found':<20} {'True':<20} {'Upper Bound':<15} {'Status':<10}\n")
+        buffer.write('-' * 120 + '\n')
+
+        # Apply the true parameter transformation once, outside the loop
+        transformed_true = transform_bbhx_to_parameters(self.true_parameters)
+
+        # Loop over parameters in order and fill the table
+        for i, (param, bounds) in enumerate(self.boundaries.items()):
+            lower, upper = bounds
+            found = self.found_parameters[i]
+            true = transformed_true[i]
+
+            # Status logic: Distance is always shown as variable
+            if param == 'Distance':
+                status = 'variable'
+            elif param in self.fixed_parameters:
+                status = 'fixed'
+            else:
+                status = 'variable'
+
+            buffer.write(f"{i:<5} {param:<25} {lower:<15.6g} {found:<20.6g} {true:<20.6g} {upper:<15.6g} {status:<10}\n")
+
+        return buffer.getvalue()
+
+
     def get_stft_of_data(self, include_sens_kwargs=False):
         f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
         f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
@@ -109,7 +160,7 @@ class MBHB_finder:
     def calculate_amplitude(self, parameters_11: Any):
 
         # Transform the parameters to BBHX format by adding f_ref = 0.0
-        parameters_bbhx = transform_to_bbhx_parameters(parameters_11)
+        parameters_bbhx = transform_parameters_to_bbhx(parameters_11)
         
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
@@ -140,7 +191,7 @@ class MBHB_finder:
         """
 
         # Transform the parameters to BBHX format by adding f_ref = 0.0
-        parameters_bbhx = transform_to_bbhx_parameters(parameters) 
+        parameters_bbhx = transform_parameters_to_bbhx(parameters) 
 
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
@@ -168,13 +219,12 @@ class MBHB_finder:
         fixed_parameters: Optional[Dict[str, Any]] = None,
     ) -> float:
         """ Calculate the time-frequency SNR without distance parameter.
-        - variable_parameters: array of 10 parameters: [mT,  q, a1, a2, phi, cos(i), lambda, sin(beta), psi, t_ref]
-        - fixed_parameters: dictionary of fixed parameters, e.g. {'Distance': 1e6} where 1e6 is the distance in parsecs.
+        - variable_parameters: the parameters that need to be optimized with differential evolution
+        - fixed_parameters: dictionary of fixed parameters. Always include {'Distance': 1e6} as a fixed parameter
 
-        parameters_10: [mT,  q, a1, a2, phi, cos(i), lambda, sin(beta), psi, t_ref]
-        The reason is that the function optimized by differential evolution needs to only have the parameters that are optimized,
+        For the most general case, have variable_parameters = parameters_10: [mT,  q, a1, a2, phi, cos(i), lambda, sin(beta), psi, t_ref]
         Since distance does not affect the SNR, it is set to a constant value.
-        f_ref = 0.0 is added to the parameters in the function transform_to_bbhx_parameters to be compatible with the waveform generator. 
+        f_ref = 0.0 is added to the parameters in the function transform_parameters_to_bbhx to be compatible with the waveform generator. 
         
         Returns:
         - -SNR: the negative SNR value, as we want to minimize the SNR.
@@ -182,26 +232,19 @@ class MBHB_finder:
         if fixed_parameters is None:
             fixed_parameters = {list(self.boundaries.items())[4][0] : list(self.boundaries.items())[4][1][0] + 0.5 * (list(self.boundaries.items())[4][1][1] - list(self.boundaries.items())[4][1][0])}
 
+        # Combine fixed and variable parameters into a single array of 11 parameters
         parameters_11 = []
-        free_idx = 0
+        variable_parameter_index = 0
         for name in self.parameter_names:
             if name in fixed_parameters:
                 parameters_11.append(fixed_parameters[name])
             else:
-                parameters_11.append(variable_parameters[free_idx])
-                free_idx += 1
+                parameters_11.append(variable_parameters[variable_parameter_index])
+                variable_parameter_index += 1
         parameters_11 = np.array(parameters_11)
         
-        """
-        # Add distance parameter to the parameters_10 and set it to the middle of the range
-        parameters_11 = np.zeros(len(parameters_10) + 1)  # +1 for f_ref and distance
-        parameters_11[:4] = parameters_10[:4]                                                                                           # mT, q, a1, a2
-        parameters_11[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])     # dL = mid point of the distance prior
-        parameters_11[5:] = parameters_10[4:]                                                                                           # phase, phi, cos(i), lambda, sin(beta), psi, t_ref
-        """
-        
         # Transform to BBHX parameters
-        parameters_bbhx = transform_to_bbhx_parameters(parameters_11)
+        parameters_bbhx = transform_parameters_to_bbhx(parameters_11)
 
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
@@ -227,31 +270,20 @@ class MBHB_finder:
                   fixed_parameters: Optional[Dict[str, Any]] = None):
 
         if fixed_parameters is None:
-            fixed_parameters = {list(self.boundaries.items())[4][0] : list(self.boundaries.items())[4][1][0] + 0.5 * (list(self.boundaries.items())[4][1][1] - list(self.boundaries.items())[4][1][0])}
+            raise ValueError("Distance must be included as a fixed parameter. Please provide a dictionary with 'Distance' as a key and its value.")
 
+        self.fixed_parameters = fixed_parameters
 
-        free_param_names = [name for name in self.parameter_names if name not in fixed_parameters]
-        bounds = np.array([self.boundaries[name] for name in free_param_names])
+        variable_parameter_names = [name for name in self.parameter_names if name not in fixed_parameters]
+        bounds = np.array([self.boundaries[name] for name in variable_parameter_names])
         initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
 
 
-
-        """
-        # make an array of the boundaries from the boundaries dictionary
-        boundaries_array  = np.array(list(self.boundaries.values()))
-        
-        # remove the distance parameter from the boundaries array as it is set to a constant value. Distance is later calculated from the amplitude.
-        boundaries_without_distance = np.delete(boundaries_array, 4, axis=0)
-
-        # draw an initial guess from the boundaries without distance
-        initial_guess_without_distance = np.random.uniform(low=boundaries_without_distance[:, 0], high=boundaries_without_distance[:, 1])
-        """
-
         time_start = time.time()
-        #SNR = self.calculate_time_frequency_SNR_without_distance(initial_guess_without_distance)
-        #print('time SNR ',np.round(time.time() - time_start,2))
-        #print('initial guess', SNR)
-        #time_start = time.time()
+        SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
+        print('time SNR ',np.round(time.time() - time_start,2))
+        print('initial guess', SNR)
+        time_start = time.time()
 
         results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance, # The function only takes 10 parameters (all except dL & f_ref)
                                                      bounds=bounds,                 # Bounds for the 10 parameters (all except dL & f_ref)
@@ -264,30 +296,52 @@ class MBHB_finder:
         print('time DE ',np.round(time.time() - time_start,2))
         print(results)
 
-        function_evaluations = results.nfev
-        found_parameters_10  = results.x
-        
-        found_parameters = {}
-        free_idx = 0
+        # Extract the optimized parameters from the results and combine them with the fixed parameters
+        found_parameters = {}                                                            # This will hold the complete set of parameters, both fixed and optimized
+        variable_parameter_index = 0                                                     # Index to track where we are in results.x (the optimized free parameters)
 
         for name in self.parameter_names:
             if name in fixed_parameters:
+                # If this parameter was fixed, take its value directly from the fixed_parameters dictionary
                 found_parameters[name] = fixed_parameters[name]
             else:
-                found_parameters[name] = results.x[free_idx]
-                free_idx += 1
+                # If this parameter was optimized by differential evolution, take its value from results.x
+                found_parameters[name] = results.x[variable_parameter_index]
+                variable_parameter_index += 1                                            # Move to the next optimized parameter
 
         found_parameters_11 = np.array([found_parameters[name] for name in self.parameter_names])
-        """
-        # Add the distance to the found parameters. Distance is set to the middle of the range.
-        found_parameters_11 = np.zeros(len(found_parameters_10)+1)
-        found_parameters_11[:4] = found_parameters_10[:4]
-        found_parameters_11[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])
-        found_parameters_11[5:] = found_parameters_10[4:]
-        """
+        
         # Calculate the amplitude factor and normalize the distance parameter to get the true distance MLE
         amplitude_factor = self.calculate_amplitude(found_parameters_11)
         found_parameters_11[4] /= amplitude_factor
 
-        print(found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11))
-        return found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11), function_evaluations, results
+        self.found_parameters = found_parameters_11
+
+        return found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11), results
+
+
+"""
+    def calculate_time_frequency_SNR_without_distance(
+        # Add distance parameter to the parameters_10 and set it to the middle of the range
+        parameters_11 = np.zeros(len(parameters_10) + 1)  # +1 for f_ref and distance
+        parameters_11[:4] = parameters_10[:4]                                                                                           # mT, q, a1, a2
+        parameters_11[4] = self.boundaries['Distance'][0] + 0.5 * (self.boundaries['Distance'][1] - self.boundaries['Distance'][0])     # dL = mid point of the distance prior
+        parameters_11[5:] = parameters_10[4:]                                                                                           # phase, phi, cos(i), lambda, sin(beta), psi, t_ref
+
+        
+    def find_MBHB():
+    
+        # make an array of the boundaries from the boundaries dictionary
+        boundaries_array  = np.array(list(self.boundaries.values()))
+        
+        # remove the distance parameter from the boundaries array as it is set to a constant value. Distance is later calculated from the amplitude.
+        boundaries_without_distance = np.delete(boundaries_array, 4, axis=0)
+
+        # draw an initial guess from the boundaries without distance
+        initial_guess_without_distance = np.random.uniform(low=boundaries_without_distance[:, 0], high=boundaries_without_distance[:, 1])
+
+        if close_initial_guess:
+            initial_guess_without_distance = self.initial_guess(variable_parameter_names, bounds, closeness_factor=0.1)
+        else:
+            initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
+"""
