@@ -135,32 +135,7 @@ class MBHB_finder:
             # SNRs
             buffer.write("\nSNRs for each run:\n")
             for i, snr in enumerate(self.SNR_all):
-                buffer.write(f"Run {i+1:<2}: SNR = {snr:.2f}\n")
-
-        # Single run fallback
-        elif hasattr(self, "found_parameters"):
-            buffer.write(f"{'Index':<5} {'Parameter':<25} {'Lower Bound':<15} {'Found':<20} {'True':<20} {'Upper Bound':<15} {'Status':<10}\n")
-            buffer.write('-' * 120 + '\n')
-
-            for i, param in enumerate(param_names):
-                lower, upper = self.boundaries[param]
-                found = self.found_parameters[i]
-                true = transformed_true[i]
-
-                if param == 'Distance':
-                    status = 'variable'
-                elif param in self.fixed_parameters:
-                    status = 'fixed'
-                else:
-                    status = 'variable'
-
-                buffer.write(f"{i:<5} {param:<25} {lower:<15.6g} {found:<20.6g} {true:<20.6g} {upper:<15.6g} {status:<10}\n")
-
-            if hasattr(self, "SNR"):
-                buffer.write(f"\nSNR: {self.SNR:.4f}\n")
-
-        else:
-            buffer.write("No search results available.\n")
+                buffer.write(f"Run {i+1:<2}: SNR = {snr:.8f}\n")
 
         return buffer.getvalue()
 
