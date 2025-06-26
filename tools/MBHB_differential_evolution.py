@@ -95,34 +95,75 @@ class MBHB_finder:
     def __str__(self):
         if self.true_parameters is None:
             raise ValueError("True parameters are not set. Please provide true parameters to the MBHB_finder instance.")
-        
+
         from io import StringIO
         buffer = StringIO()
 
-        # Write the table header
-        buffer.write(f"{'Index':<5} {'Parameter':<25} {'Lower Bound':<15} {'Found':<20} {'True':<20} {'Upper Bound':<15} {'Status':<10}\n")
-        buffer.write('-' * 120 + '\n')
-
-        # Apply the true parameter transformation once, outside the loop
+        param_names = list(self.boundaries.keys())
         transformed_true = transform_bbhx_to_parameters(self.true_parameters)
 
-        # Loop over parameters in order and fill the table
-        for i, (param, bounds) in enumerate(self.boundaries.items()):
-            lower, upper = bounds
-            found = self.found_parameters[i]
-            true = transformed_true[i]
+        # Use multiple columns for multiple runs
+        if hasattr(self, "found_parameters_11_all"):
+            num_runs = self.found_parameters_11_all.shape[0]
 
-            # Status logic: Distance is always shown as variable
-            if param == 'Distance':
-                status = 'variable'
-            elif param in self.fixed_parameters:
-                status = 'fixed'
-            else:
-                status = 'variable'
+            # Header
+            header = f"{'Index':<5} {'Parameter':<25} {'Lower Bound':<15}"
+            for run in range(num_runs):
+                header += f"{f'Found {run+1}':<20}"
+            header += f"{'True':<20} {'Upper Bound':<15} {'Status':<10}"
+            buffer.write(header + "\n")
+            buffer.write('-' * len(header) + '\n')
 
-            buffer.write(f"{i:<5} {param:<25} {lower:<15.6g} {found:<20.6g} {true:<20.6g} {upper:<15.6g} {status:<10}\n")
+            for i, param in enumerate(param_names):
+                lower, upper = self.boundaries[param]
+                true = transformed_true[i]
+
+                if param == 'Distance':
+                    status = 'variable'
+                elif param in self.fixed_parameters:
+                    status = 'fixed'
+                else:
+                    status = 'variable'
+
+                row = f"{i:<5} {param:<25} {lower:<15.6g}"
+                for run in range(num_runs):
+                    found = self.found_parameters_11_all[run, i]
+                    row += f"{found:<20.6g}"
+                row += f"{true:<20.6g} {upper:<15.6g} {status:<10}"
+                buffer.write(row + "\n")
+
+            # SNRs
+            buffer.write("\nSNRs for each run:\n")
+            for i, snr in enumerate(self.SNR_all):
+                buffer.write(f"Run {i+1:<2}: SNR = {snr:.2f}\n")
+
+        # Single run fallback
+        elif hasattr(self, "found_parameters"):
+            buffer.write(f"{'Index':<5} {'Parameter':<25} {'Lower Bound':<15} {'Found':<20} {'True':<20} {'Upper Bound':<15} {'Status':<10}\n")
+            buffer.write('-' * 120 + '\n')
+
+            for i, param in enumerate(param_names):
+                lower, upper = self.boundaries[param]
+                found = self.found_parameters[i]
+                true = transformed_true[i]
+
+                if param == 'Distance':
+                    status = 'variable'
+                elif param in self.fixed_parameters:
+                    status = 'fixed'
+                else:
+                    status = 'variable'
+
+                buffer.write(f"{i:<5} {param:<25} {lower:<15.6g} {found:<20.6g} {true:<20.6g} {upper:<15.6g} {status:<10}\n")
+
+            if hasattr(self, "SNR"):
+                buffer.write(f"\nSNR: {self.SNR:.4f}\n")
+
+        else:
+            buffer.write("No search results available.\n")
 
         return buffer.getvalue()
+
 
 
     def get_stft_of_data(self, include_sens_kwargs=False):
@@ -210,7 +251,7 @@ class MBHB_finder:
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
 
-        # Return the normal/positive SNR value as we are not optimizing this function
+        # Return the normal positive SNR value as we are not optimizing this function
         return dh / np.sqrt(hh) 
     
     def calculate_time_frequency_SNR_without_distance(
@@ -263,9 +304,11 @@ class MBHB_finder:
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
 
-        return - dh / np.sqrt(hh) # Return the negative SNR value, as we want to minimize the SNR
+        # Return the negative SNR value, as we want to minimize the SNR
+        return - dh / np.sqrt(hh)
 
     def find_MBHB(self, 
+                  number_of_searches= 1,
                   differential_evolution_kwargs = None, 
                   fixed_parameters: Optional[Dict[str, Any]] = None):
 
@@ -276,48 +319,67 @@ class MBHB_finder:
 
         variable_parameter_names = [name for name in self.parameter_names if name not in fixed_parameters]
         bounds = np.array([self.boundaries[name] for name in variable_parameter_names])
-        initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
-
-
-        time_start = time.time()
-        SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
-        print('time SNR ',np.round(time.time() - time_start,2))
-        print('initial guess', SNR)
-        time_start = time.time()
-
-        results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance, # The function only takes 10 parameters (all except dL & f_ref)
-                                                     bounds=bounds,                 # Bounds for the 10 parameters (all except dL & f_ref)
-                                                     x0=initial_guess_without_distance,                  # Initial guess for the 10 parameters (all except dL & f_ref) 
-                                                     args=(fixed_parameters,),
-                                                     **differential_evolution_kwargs,                    # Additional keyword arguments for the differential evolution algorithm
-                                                    )
         
-     
-        print('time DE ',np.round(time.time() - time_start,2))
-        print(results)
+        found_parameters_11_all = []
+        SNR_all = []
+        results_all = []
 
-        # Extract the optimized parameters from the results and combine them with the fixed parameters
-        found_parameters = {}                                                            # This will hold the complete set of parameters, both fixed and optimized
-        variable_parameter_index = 0                                                     # Index to track where we are in results.x (the optimized free parameters)
+        for search_index in range(number_of_searches):
 
-        for name in self.parameter_names:
-            if name in fixed_parameters:
-                # If this parameter was fixed, take its value directly from the fixed_parameters dictionary
-                found_parameters[name] = fixed_parameters[name]
-            else:
-                # If this parameter was optimized by differential evolution, take its value from results.x
-                found_parameters[name] = results.x[variable_parameter_index]
-                variable_parameter_index += 1                                            # Move to the next optimized parameter
+            initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
 
-        found_parameters_11 = np.array([found_parameters[name] for name in self.parameter_names])
-        
-        # Calculate the amplitude factor and normalize the distance parameter to get the true distance MLE
-        amplitude_factor = self.calculate_amplitude(found_parameters_11)
-        found_parameters_11[4] /= amplitude_factor
+            time_start = time.time()
+            SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
+            print('time SNR ',np.round(time.time() - time_start,2))
+            print('initial guess', SNR)
+            time_start = time.time()
 
-        self.found_parameters = found_parameters_11
+            results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
+                                                        bounds=bounds,                                          # Bounds for the 10 parameters (all except dL & f_ref)
+                                                        x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
+                                                        args=(fixed_parameters,),
+                                                        **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
+                                                        )
+            results_all.append(results)
 
-        return found_parameters_11, self.calculate_time_frequency_SNR_with_distance(found_parameters_11), results
+            # Extract the optimized parameters from the results and combine them with the fixed parameters
+            found_parameters = {}                                                                                # This will hold the complete set of parameters, both fixed and optimized
+            variable_parameter_index = 0                                                                         # Index to track where we are in results.x (the optimized free parameters)
+
+            for name in self.parameter_names:
+                if name in fixed_parameters:
+                    # If this parameter was fixed, take its value directly from the fixed_parameters dictionary
+                    found_parameters[name] = fixed_parameters[name]
+                else:
+                    # If this parameter was optimized by differential evolution, take its value from results.x
+                    found_parameters[name] = results.x[variable_parameter_index]
+                    variable_parameter_index += 1                                                                # Move to the next optimized parameter
+
+            found_parameters_11 = np.array([found_parameters[name] for name in self.parameter_names])
+            
+            # Calculate the amplitude factor and normalize the distance parameter to get the true distance MLE
+            amplitude_factor = self.calculate_amplitude(found_parameters_11)
+            found_parameters_11[4] /= amplitude_factor
+
+            found_parameters_11_all.append(found_parameters_11)
+            SNR_all.append(self.calculate_time_frequency_SNR_with_distance(found_parameters_11))                 # function calculate_time_frequency_SNR_with_distance does not multiply the SNR by -1
+
+        found_parameters_11_all = np.array(found_parameters_11_all)
+        SNR_all = np.array(SNR_all)
+
+        # Find the maximum SNR and the corresponding parameters. Taking argmax because the function calculate_time_frequency_SNR_with_distance does not multiply the SNR by -1
+        max_index = np.argmax(SNR_all)
+        found_parameters_11_max = found_parameters_11_all[max_index]
+        SNR_max = SNR_all[max_index]
+
+        # Store the found parameters and SNR values
+        self.found_parameters_11_all = found_parameters_11_all
+        self.SNR_all = SNR_all
+
+        self.found_parameters_11_max = found_parameters_11_max
+        self.SNR_max = SNR_max
+
+        return found_parameters_11_max, SNR_max, results_all
 
 
 """
