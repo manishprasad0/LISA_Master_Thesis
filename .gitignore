@@ -8,3 +8,5 @@ LATW_tutorials/bbhx_tuorial.ipynb
 *.pkl
 *.npy
 mcmc
+slurm-*
+differential_evolution/differential_evolution_results

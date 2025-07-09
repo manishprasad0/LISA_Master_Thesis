@@ -7,6 +7,7 @@ sys.path.append(parent_dir)
 import numpy as np
 import multiprocessing as mp
 import time
+from datetime import datetime
 
 # LISA modules
 from lisatools.utils.constants import *
@@ -19,10 +20,19 @@ from tools.likelihood import get_dh, get_hh, TimeFreqSNR
 from tools.MBHB_differential_evolution import MBHB_finder_time_frequency, transform_bbhx_to_parameters, transform_parameters_to_bbhx
 from tools.save_and_load_DE import save_de_results
 
+import psutil
+
+mem = psutil.virtual_memory()
+print(f"Total RAM: {mem.total / (1024 ** 3):.2f} GB")
+print(f"Available RAM: {mem.available / (1024 ** 3):.2f} GB")
+print(f"Used RAM: {mem.used / (1024 ** 3):.2f} GB")
+print(f"RAM Usage: {mem.percent}%")
+print("Number of CPU cores:", mp.cpu_count())
+
 def main():
     # Set up multiprocessing
-    mp.set_start_method('fork', force=True)
-
+    # mp.set_start_method('fork', force=True)
+    
     # Simulation parameters
     Tobs = YRSID_SI/12
     dt = 5.
@@ -85,15 +95,15 @@ def main():
         'strategy': 'best1bin',
         'popsize': 15,
         'tol': 1e-8,
-        'maxiter': 5,
+        'maxiter': 500,
         'recombination': 0.9,
         'mutation': (0.4, 0.8),
         'polish': False,
         'disp': True,
-        'workers': -1,
+        'workers': 16,
         'updating': 'deferred',
         'init': 'latinhypercube',
-    }
+    } 
 
     analysis = TimeFreqSNR(
         data_t_truncated,
@@ -121,16 +131,17 @@ def main():
         true_parameters=parameters,
     )
 
-    print("Starting differential evolution search...")
     start_time = time.time()
 
     DifferentialEvolution_time_frequency.get_stft_of_data()
+    
+    print("Starting differential evolution search...")
     found_parameters_tf, found_snr_found_tf, results_tf, parameters_history_tf = DifferentialEvolution_time_frequency.find_MBHB(number_of_searches=number_of_searches, 
                                                                                                                                 differential_evolution_kwargs=differential_evolution_kwargs,)
     
     end_time = time.time()
     print(f"Differential evolution search completed in {end_time - start_time:.2f} seconds.")
-    
+
     save_de_results(
         found_parameters_tf,
         found_snr_found_tf,
@@ -140,6 +151,8 @@ def main():
         folder_name="differential_evolution/differential_evolution_results",
         filename_prefix="tf_run"
     )
+    
+    print("Finished at:", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 if __name__ == "__main__":
     main()

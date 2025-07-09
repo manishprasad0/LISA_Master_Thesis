@@ -2,7 +2,6 @@ from bbhx.utils.constants import *
 import numpy as np
 import scipy as sp
 from scipy.optimize import OptimizeResult
-import xarray as xr
 import time
 import os
 import pickle
@@ -327,7 +326,8 @@ class MBHB_finder_time_frequency:
             #print('time SNR ',np.round(time.time() - time_start,2))
             #print('initial guess', SNR)
             #time_start = time.time()
-
+            print("Starting differential evolution")
+            
             results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
                                                         bounds=bounds,                                          # Bounds for the 10 parameters (all except dL & f_ref)
                                                         x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
