@@ -31,7 +31,7 @@ def save_de_results(found_parameters_tf, found_snr_found_tf, true_snr,
         parameters_history=parameters_history_tf
     )
 
-    print(f"✅ Saved results to {filepath}")
+    print(f"Saved results to {filepath}")
 
 
 

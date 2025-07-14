@@ -34,7 +34,7 @@ def main():
     # mp.set_start_method('fork', force=True)
     
     # Simulation parameters
-    Tobs = YRSID_SI/12
+    Tobs = YRSID_SI/3
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
 
@@ -72,7 +72,7 @@ def main():
             data_t_truncated = gravitational_wave_data_t[:, :cutoff_index]
             return data_t_truncated, cutoff_index
 
-    data_t_truncated,   cutoff_index =  pre_merger(data_t, time_before_merger, t_ref, t_array)
+    data_t_truncated, cutoff_index =  pre_merger(data_t, time_before_merger, t_ref, t_array)
 
     # Differential Evolution Analysis
     boundaries = {}
@@ -95,12 +95,12 @@ def main():
         'strategy': 'best1bin',
         'popsize': 15,
         'tol': 1e-8,
-        'maxiter': 500,
+        'maxiter': 200,
         'recombination': 0.9,
         'mutation': (0.4, 0.8),
         'polish': False,
         'disp': True,
-        'workers': 16,
+        'workers': 2,
         'updating': 'deferred',
         'init': 'latinhypercube',
     } 
@@ -115,7 +115,9 @@ def main():
     )
     analysis.get_stft_of_data()
     true_snr, amplitude = analysis.calculate_time_frequency_SNR(*parameters, waveform_kwargs=waveform_kwargs)
-
+    
+    print(f"True SNR: {true_snr}")
+    
     # For full signal, use data_t =  sim.signal_t[0] , set pre_merger=False, and comment   cutoff_index = cutoff_index
     # For pre-merger,  use data_t =  data_t_truncated, set pre_merger=True , and uncomment cutoff_index = cutoff_index
     DifferentialEvolution_time_frequency = MBHB_finder_time_frequency(
@@ -141,7 +143,9 @@ def main():
     
     end_time = time.time()
     print(f"Differential evolution search completed in {end_time - start_time:.2f} seconds.")
-
+    
+    print(DifferentialEvolution_time_frequency)
+    
     save_de_results(
         found_parameters_tf,
         found_snr_found_tf,
