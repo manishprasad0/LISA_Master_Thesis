@@ -385,9 +385,10 @@ class MBHB_finder_time_frequency:
     
 
 class MBHB_finder_frequency_domain:
-    def __init__(self, data_f, wave_gen, waveform_kwargs, boundaries, true_parameters=None):
+    def __init__(self, data_f, wave_gen, waveform_kwargs, boundaries, cutoff_time, true_parameters=None):
         self.data_f = data_f
         self.wave_gen = wave_gen
+        self.cutoff_time = cutoff_time         # Have to give to this to be consistent with transform_parameters_to_bbhx functions.
 
         # All the following quantities are for after the STFT is calculated
         self.dt = None
@@ -406,6 +407,9 @@ class MBHB_finder_frequency_domain:
         # Initialize found parameters and true parameters
         self.true_parameters = true_parameters
 
+        # Others
+        self.history = []
+
     def __str__(self):
         if self.true_parameters is None:
             raise ValueError("True parameters are not set. Please provide true parameters to the MBHB_finder instance.")
@@ -414,7 +418,7 @@ class MBHB_finder_frequency_domain:
         buffer = StringIO()
 
         param_names = list(self.boundaries.keys())
-        transformed_true = transform_bbhx_to_parameters(self.true_parameters)
+        transformed_true = transform_bbhx_to_parameters(self.true_parameters, self.cutoff_time)
 
         # Use multiple columns for multiple runs
         if hasattr(self, "found_parameters_11_all"):
@@ -453,6 +457,18 @@ class MBHB_finder_frequency_domain:
 
         return buffer.getvalue()
 
+    def callback(self, intermediate_result: OptimizeResult):
+        """
+        Callback function to store the history of the optimization process.
+        """
+        self.history.append({
+            'xk': intermediate_result.x.copy(),
+            'fun': intermediate_result.fun,
+            'nit': intermediate_result.nit,
+            'message': intermediate_result.message,
+            'success': intermediate_result.success,
+            'convergence': intermediate_result.convergence
+        })
 
 
     def prepare_data(self, f_array, df, include_sens_kwargs=False):
@@ -483,7 +499,7 @@ class MBHB_finder_frequency_domain:
     def calculate_amplitude(self, parameters_11: Any):
 
         # Transform the parameters to BBHX format by adding f_ref = 0.0
-        parameters_bbhx = transform_parameters_to_bbhx(parameters_11)
+        parameters_bbhx = transform_parameters_to_bbhx(parameters_11, self.cutoff_time)
         
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
@@ -505,7 +521,7 @@ class MBHB_finder_frequency_domain:
         """
 
         # Transform the parameters to BBHX format by adding f_ref = 0.0
-        parameters_bbhx = transform_parameters_to_bbhx(parameters) 
+        parameters_bbhx = transform_parameters_to_bbhx(parameters, self.cutoff_time)
 
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
@@ -548,7 +564,7 @@ class MBHB_finder_frequency_domain:
         parameters_11 = np.array(parameters_11)
 
         # Transform to BBHX parameters
-        parameters_bbhx = transform_parameters_to_bbhx(parameters_11)
+        parameters_bbhx = transform_parameters_to_bbhx(parameters_11, self.cutoff_time)
 
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
@@ -566,7 +582,7 @@ class MBHB_finder_frequency_domain:
                   fixed_parameters: Optional[Dict[str, Any]] = None):
 
         if fixed_parameters is None:
-            raise ValueError("Distance must be included as a fixed parameter. Please provide a dictionary with 'Distance' as a key and its value.")
+            fixed_parameters = {list(self.boundaries.items())[4][0] : list(self.boundaries.items())[4][1][0] + 0.5 * (list(self.boundaries.items())[4][1][1] - list(self.boundaries.items())[4][1][0])}
 
         self.fixed_parameters = fixed_parameters
 
@@ -576,8 +592,11 @@ class MBHB_finder_frequency_domain:
         found_parameters_11_all = []
         SNR_all = []
         results_all = []
+        parameters_history = []
 
         for search_index in range(number_of_searches):
+            
+            self.history = []
 
             initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
 
@@ -592,8 +611,12 @@ class MBHB_finder_frequency_domain:
                                                         x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
                                                         args=(fixed_parameters,),
                                                         **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
+                                                        callback=self.callback,   # <--- here
                                                         )
             results_all.append(results)
+
+            # Store the history of the optimization process
+            parameters_history.append([step['xk'] for step in self.history])
 
             # Extract the optimized parameters from the results and combine them with the fixed parameters
             found_parameters = {}                                                                                # This will hold the complete set of parameters, both fixed and optimized
@@ -619,11 +642,15 @@ class MBHB_finder_frequency_domain:
 
         found_parameters_11_all = np.array(found_parameters_11_all)
         SNR_all = np.array(SNR_all)
+        results_all = np.array(results_all)
+        parameters_history = np.array(parameters_history)
 
         # Find the maximum SNR and the corresponding parameters. Taking argmax because the function calculate_time_frequency_SNR_with_distance does not multiply the SNR by -1
         max_index = np.argmax(SNR_all)
         found_parameters_11_max = found_parameters_11_all[max_index]
         SNR_max = SNR_all[max_index]
+        results_max = results_all[max_index]
+        parameters_history_max = parameters_history[max_index]
 
         # Store the found parameters and SNR values
         self.found_parameters_11_all = found_parameters_11_all
@@ -632,7 +659,7 @@ class MBHB_finder_frequency_domain:
         self.found_parameters_11_max = found_parameters_11_max
         self.SNR_max = SNR_max
 
-        return found_parameters_11_max, SNR_max, results_all
+        return found_parameters_11_max, SNR_max, results_max, parameters_history_max
 
 
 
