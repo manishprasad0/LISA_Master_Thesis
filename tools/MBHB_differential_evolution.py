@@ -20,6 +20,75 @@ from typing import Any, Tuple, Optional, List, Dict
 # parameters_all= [m1, m2, a1, a2, dL              , phi, f_ref,     i , lambda,     beta , psi, t_ref] = parameters_bbhx
 # results.x is same as parameters_10 i.e. transformed parameters without distance and f_ref
 
+def scale_parameters(x_transformed: np.ndarray, boundaries: np.ndarray) -> np.ndarray:
+    """
+    Scale transformed parameters to the [0, 1] range using min-max scaling.
+    - x_transformed: 11D array of transformed parameters
+    - boundaries: 11x2 array, where boundaries[i] = [min_i, max_i]
+    Returns
+    - scaled: array of shape (11,) with values in [0, 1]
+    """
+    mins = boundaries[:, 0]
+    maxs = boundaries[:, 1]
+    return (x_transformed - mins) / (maxs - mins)
+
+def unscale_parameters(x_scaled: np.ndarray, boundaries: np.ndarray) -> np.ndarray:
+    """
+    Convert scaled parameters back to their original (transformed) range.
+    - x_scaled: 11D array with values in [0, 1]
+    - boundaries: 11x2 array, where boundaries[i] = [min_i, max_i]
+    Returns
+    - transformed: array of shape (11,)
+    """
+    mins = boundaries[:, 0]
+    maxs = boundaries[:, 1]
+    return x_scaled * (maxs - mins) + mins
+
+def boundaries_dict_to_array(boundaries: dict, param_names: list[str]) -> np.ndarray:
+    """
+    Converts a boundaries dictionary to a (len(param_names), 2) array
+    ordered according to param_names.
+
+    Parameters:
+    - boundaries: dict mapping parameter names to [min, max] lists
+    - param_names: list of parameter names in desired order
+
+    Returns:
+    - np.ndarray of shape (len(param_names), 2)
+    """
+    array = []
+    for name in param_names:
+        if name not in boundaries:
+            raise ValueError(f"Parameter '{name}' not found in boundaries dictionary.")
+        bounds = boundaries[name]
+        if len(bounds) != 2:
+            raise ValueError(f"Bounds for parameter '{name}' should be a list of [min, max].")
+        array.append(bounds)
+    return np.array(array)
+
+def scale_fixed_parameters(fixed_parameters: dict, boundaries: dict) -> dict:
+    """
+    Scales fixed parameters to the [0, 1] range using their boundaries.
+
+    Parameters:
+    - fixed_parameters: dict of parameter name -> fixed value
+    - boundaries: dict of parameter name -> [min, max]
+
+    Returns:
+    - fixed_parameters_01: dict of parameter name -> scaled value in [0, 1]
+    """
+    fixed_parameters_01 = {}
+    for name, value in fixed_parameters.items():
+        if name not in boundaries:
+            raise ValueError(f"Boundary for parameter '{name}' not found.")
+        min_val, max_val = boundaries[name]
+        if not (min_val <= value <= max_val):
+            raise ValueError(f"Fixed value {value} for '{name}' is outside the boundary [{min_val}, {max_val}].")
+        scaled_value = (value - min_val) / (max_val - min_val)
+        fixed_parameters_01[name] = scaled_value
+    return fixed_parameters_01
+
+
 def transform_parameters_to_bbhx(x_11: np.ndarray, cutoff_time=None) -> np.ndarray:
     """
     Transform parameters to BBHX format. 
@@ -27,6 +96,8 @@ def transform_parameters_to_bbhx(x_11: np.ndarray, cutoff_time=None) -> np.ndarr
     Returns 
     - all_parameters: an array of 12 parameters (input for bbhx): [m1, m2, a1, a2, dL, phi, f_ref, i, lambda, beta, psi, t_ref]
     """
+    
+    #x11 = unscale_parameters(all_parameters, boundaries)
 
     all_parameters = np.zeros(12)
     mT = np.exp(x_11[0])
@@ -63,6 +134,9 @@ def transform_bbhx_to_parameters(x: np.ndarray, cutoff_time=None) -> np.ndarray:
     all_parameters[8] = np.sin(x[9])
     all_parameters[9] = x[10]
     all_parameters[10] = x[11] - cutoff_time if cutoff_time is not None else x[11]  # Subtract cutoff_time from t_ref if provided, otherwise keep it as is
+
+    #all_parameters = scale_parameters(all_parameters, boundaries)
+
     return all_parameters
 
 class MBHB_finder_time_frequency:
@@ -87,7 +161,19 @@ class MBHB_finder_time_frequency:
         # waveform kwargs
         self.waveform_kwargs = waveform_kwargs
         self.boundaries = boundaries                            # boundaries for the 11 parameters including distance as a dictionary.
-        self.parameter_names = list(self.boundaries.keys())     # List of parameter names from the boundaries dictionary
+        self.parameter_names = ['Total_Mass',
+                                'Mass_Ratio',
+                                'Spin1',
+                                'Spin2',
+                                'Distance',
+                                'Phase',
+                                'cos(Inclination)',
+                                'Ecliptic_Longitude',
+                                'sin(Ecliptic_Latitude)',
+                                'Polarization',
+                                'Coalescence_Time'
+                                ]
+        self.boundaries_array = boundaries_dict_to_array(self.boundaries, self.parameter_names)
 
         # Initialize found parameters and true parameters
         self.true_parameters = true_parameters
@@ -273,6 +359,7 @@ class MBHB_finder_time_frequency:
                 variable_parameter_index += 1
         parameters_11 = np.array(parameters_11)
         
+        parameters_11 = unscale_parameters(parameters_11, self.boundaries_array)
         # Transform to BBHX parameters
         parameters_bbhx = transform_parameters_to_bbhx(parameters_11, self.cutoff_time)
 
@@ -306,9 +393,12 @@ class MBHB_finder_time_frequency:
 
 
         self.fixed_parameters = fixed_parameters
+        self.fixed_parameters_01 = scale_fixed_parameters(self.fixed_parameters, self.boundaries)
 
         variable_parameter_names = [name for name in self.parameter_names if name not in fixed_parameters]
-        bounds = np.array([self.boundaries[name] for name in variable_parameter_names])
+        
+        #bounds = np.array([self.boundaries[name] for name in variable_parameter_names])
+        bounds = np.array([(0.0, 1.0)] * len(variable_parameter_names))
         
         found_parameters_11_all = []
         SNR_all = []
@@ -331,7 +421,7 @@ class MBHB_finder_time_frequency:
             results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
                                                         bounds=bounds,                                          # Bounds for the 10 parameters (all except dL & f_ref)
                                                         x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
-                                                        args=(fixed_parameters,),
+                                                        args=(self.fixed_parameters_01,),
                                                         **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
                                                         callback=self.callback,   # <--- here
                                                         )
@@ -345,16 +435,17 @@ class MBHB_finder_time_frequency:
             variable_parameter_index = 0                                                                         # Index to track where we are in results.x (the optimized free parameters)
 
             for name in self.parameter_names:
-                if name in fixed_parameters:
+                if name in self.fixed_parameters_01:
                     # If this parameter was fixed, take its value directly from the fixed_parameters dictionary
-                    found_parameters[name] = fixed_parameters[name]
+                    found_parameters[name] = self.fixed_parameters_01[name]
                 else:
                     # If this parameter was optimized by differential evolution, take its value from results.x
                     found_parameters[name] = results.x[variable_parameter_index]
                     variable_parameter_index += 1                                                                # Move to the next optimized parameter
 
             found_parameters_11 = np.array([found_parameters[name] for name in self.parameter_names])
-            
+            found_parameters_11 = unscale_parameters(found_parameters_11, self.boundaries_array)  # Unscale the parameters to get the true parameters
+
             # Calculate the amplitude factor and normalize the distance parameter to get the true distance MLE
             amplitude_factor = self.calculate_amplitude(found_parameters_11)
             found_parameters_11[4] /= amplitude_factor
