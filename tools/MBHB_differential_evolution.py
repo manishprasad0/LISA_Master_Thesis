@@ -386,7 +386,8 @@ class MBHB_finder_time_frequency:
     def find_MBHB(self, 
                   number_of_searches= 1,
                   differential_evolution_kwargs = None, 
-                  fixed_parameters: Optional[Dict[str, Any]] = None):
+                  fixed_parameters: Optional[Dict[str, Any]] = None,
+                  initial_guess_without_distance: Optional[np.ndarray] = None):
 
         if fixed_parameters is None:
             fixed_parameters = {list(self.boundaries.items())[4][0] : list(self.boundaries.items())[4][1][0] + 0.5 * (list(self.boundaries.items())[4][1][1] - list(self.boundaries.items())[4][1][0])}
@@ -408,9 +409,10 @@ class MBHB_finder_time_frequency:
         for search_index in range(number_of_searches):
 
             self.history = [] 
-            
-            initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
 
+            if initial_guess_without_distance is None:
+                initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
+        
             #time_start = time.time()
             #SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
             #print('time SNR ',np.round(time.time() - time_start,2))
@@ -429,7 +431,7 @@ class MBHB_finder_time_frequency:
             
             # Store the history of the optimization process
             parameters_history.append([step['xk'] for step in self.history])
-
+            print(parameters_history)
             # Extract the optimized parameters from the results and combine them with the fixed parameters
             found_parameters = {}                                                                                # This will hold the complete set of parameters, both fixed and optimized
             variable_parameter_index = 0                                                                         # Index to track where we are in results.x (the optimized free parameters)
