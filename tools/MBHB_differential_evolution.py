@@ -330,7 +330,7 @@ class MBHB_finder_time_frequency:
             
             results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
                                                         bounds=bounds,                                          # Bounds for the 10 parameters (all except dL & f_ref)
-                                                        x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
+                                                        #x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
                                                         args=(fixed_parameters,),
                                                         **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
                                                         callback=self.callback,   # <--- here
@@ -853,7 +853,7 @@ class MBHB_finder_lisatools:
 
             results = sp.optimize.differential_evolution(self.calculate_lisatools_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
                                                         bounds=bounds,                                          # Bounds for the 10 parameters (all except dL & f_ref)
-                                                        x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
+                                                        #x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
                                                         args=(fixed_parameters,),
                                                         **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
                                                         )
