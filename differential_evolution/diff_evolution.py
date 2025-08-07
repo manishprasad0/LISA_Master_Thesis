@@ -34,7 +34,7 @@ def main():
     # mp.set_start_method('fork', force=True)
     
     # Simulation parameters
-    Tobs = YRSID_SI/3
+    Tobs = YRSID_SI/12
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
 
@@ -43,18 +43,18 @@ def main():
 
     m1 = 3e5
     m2 = 1.5e5
-    a1 = 0.2
-    a2 = 0.4
-    dist = 20 * PC_SI * 1e9
-    phi_ref = np.pi/2
+    a1 = 0.753
+    a2 = 0.621
+    dist = 10 * PC_SI * 1e9
+    phi_ref = 0.0 #np.pi/2
     f_ref = 0.0
-    inc = np.pi/3
-    lam = np.pi/1.
-    beta = np.pi/4.
-    psi = np.pi/4.
+    inc = 1.224
+    lam = 3.509
+    beta = 0.292
+    psi = 0
     t_ref = 0.95 * Tobs
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
-    modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
+    modes = [(2,2)]#, (2,1), (3,3), (3,2), (4,4), (4,3)]
     waveform_kwargs = dict(length=1024, direct=False, fill=True, squeeze=False, modes=modes)
 
     data_t, data_f, f_array, t_array, sens_mat = sim(seed = 42, parameters=parameters, waveform_kwargs=waveform_kwargs)
@@ -73,40 +73,55 @@ def main():
             return data_t_truncated, cutoff_index
 
     data_t_truncated, cutoff_index =  pre_merger(data_t, time_before_merger, t_ref, t_array)
+    #signal_t_truncated, cutoff_index =  pre_merger(sim.signal_t[0], time_before_merger, t_ref, t_array)
 
     # Differential Evolution Analysis
     boundaries = {}
     boundaries['Total_Mass'] = [np.log(1e5), np.log(1e6)]   
-    boundaries['Mass_Ratio'] = [0.05, 0.999999]
+    boundaries['Mass_Ratio'] = [0.05, 0.99]
     boundaries['Spin1'] = [-1, 1]
     boundaries['Spin2'] = [-1, 1]
     boundaries['Distance'] = [1, 50] # in GPc i.e. dL / (PC_SI * 1e9)
-    boundaries['Phase'] = [0.0, 2 * np.pi]
+    boundaries['Phase'] = [-np.pi, np.pi]
     boundaries['cos(Inclination)'] = [-1, 1]
     boundaries['Ecliptic_Longitude'] = [0, 2*np.pi]
     boundaries['sin(Ecliptic_Latitude)'] = [-1, 1]
     boundaries['Polarization'] = [0, np.pi]
-    boundaries['Coalescence_Time'] = [0, max_time - cutoff_time]
+    boundaries['Coalescence_Time'] = [0, max_time - cutoff_time]    # Prior of 24 hours
 
     number_of_searches = 1
     nperseg = 5000
 
     differential_evolution_kwargs = {
-        'strategy': 'best1bin',
+        'strategy': 'rand1exp',
         'popsize': 15,
         'tol': 1e-8,
-        'maxiter': 200,
-        'recombination': 0.9,
-        'mutation': (0.4, 0.8),
-        'polish': False,
+        'maxiter': 10,
+        'recombination': 0.6,
+        'mutation': (0.5, 0.8),
+        'polish': True,
         'disp': True,
         'workers': 2,
         'updating': 'deferred',
-        'init': 'latinhypercube',
-    } 
+        'init': 'sobol',
+    }
+    
+    fixed_parameters = {
+        'Total_Mass': np.log(m1 + m2),
+        'Mass_Ratio': m2 / m1,
+        'Spin1': a1,
+        'Spin2': a2,
+        'Distance': boundaries['Distance'][0] + 0.5 * (boundaries['Distance'][1] - boundaries['Distance'][0]), # Always include distance in fixed parameters
+        'Phase': phi_ref,
+        'cos(Inclination)': np.cos(inc),
+        'Ecliptic_Longitude': lam,
+        #'sin(Ecliptic_Latitude)': np.sin(beta),
+        'Polarization': psi,
+        'Coalescence_Time': t_ref-cutoff_time,
+    }
 
     analysis = TimeFreqSNR(
-        data_t_truncated,
+        data_t = data_t_truncated,
         wave_gen=wave_gen,
         nperseg=nperseg,
         dt_full=dt,
@@ -133,13 +148,14 @@ def main():
         true_parameters=parameters,
     )
 
-    start_time = time.time()
-
     DifferentialEvolution_time_frequency.get_stft_of_data()
     
+    start_time = time.time()
     print("Starting differential evolution search...")
+    
     found_parameters_tf, found_snr_found_tf, results_tf, parameters_history_tf = DifferentialEvolution_time_frequency.find_MBHB(number_of_searches=number_of_searches, 
-                                                                                                                                differential_evolution_kwargs=differential_evolution_kwargs,)
+                                                                                                                                differential_evolution_kwargs=differential_evolution_kwargs,
+                                                                                                                                fixed_parameters=None,)
     
     end_time = time.time()
     print(f"Differential evolution search completed in {end_time - start_time:.2f} seconds.")
