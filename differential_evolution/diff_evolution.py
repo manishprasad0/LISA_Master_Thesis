@@ -20,21 +20,20 @@ from tools.likelihood import get_dh, get_hh, TimeFreqSNR
 from tools.MBHB_differential_evolution import MBHB_finder_time_frequency, transform_bbhx_to_parameters, transform_parameters_to_bbhx
 from tools.save_and_load_DE import save_de_results
 
-import psutil
-
-mem = psutil.virtual_memory()
-print(f"Total RAM: {mem.total / (1024 ** 3):.2f} GB")
-print(f"Available RAM: {mem.available / (1024 ** 3):.2f} GB")
-print(f"Used RAM: {mem.used / (1024 ** 3):.2f} GB")
-print(f"RAM Usage: {mem.percent}%")
-print("Number of CPU cores:", mp.cpu_count())
+#import psutil
+#mem = psutil.virtual_memory()
+#print(f"Total RAM: {mem.total / (1024 ** 3):.2f} GB")
+#print(f"Available RAM: {mem.available / (1024 ** 3):.2f} GB")
+#print(f"Used RAM: {mem.used / (1024 ** 3):.2f} GB")
+#print(f"RAM Usage: {mem.percent}%")
+#print("Number of CPU cores:", mp.cpu_count())
 
 def main():
     # Set up multiprocessing
     # mp.set_start_method('fork', force=True)
     
     # Simulation parameters
-    Tobs = YRSID_SI/3
+    Tobs = 2 * (YRSID_SI/12)
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
 
@@ -43,18 +42,18 @@ def main():
 
     m1 = 3e5
     m2 = 1.5e5
-    a1 = 0.2
-    a2 = 0.4
-    dist = 20 * PC_SI * 1e9
-    phi_ref = np.pi/2
+    a1 = 0.753
+    a2 = 0.621
+    dist = 10 * PC_SI * 1e9
+    phi_ref = 0.0 #np.pi/2
     f_ref = 0.0
-    inc = np.pi/3
-    lam = np.pi/1.
-    beta = np.pi/4.
-    psi = np.pi/4.
+    inc = 1.224
+    lam = 3.509
+    beta = 0.292
+    psi = 0
     t_ref = 0.95 * Tobs
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
-    modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
+    modes = [(2,2)]#, (2,1), (3,3), (3,2), (4,4), (4,3)]
     waveform_kwargs = dict(length=1024, direct=False, fill=True, squeeze=False, modes=modes)
 
     data_t, data_f, f_array, t_array, sens_mat = sim(seed = 42, parameters=parameters, waveform_kwargs=waveform_kwargs)
@@ -88,23 +87,21 @@ def main():
     boundaries['Polarization'] = [0, np.pi]
     boundaries['Coalescence_Time'] = [0, max_time - cutoff_time]
 
-    number_of_searches = 1
+    number_of_searches = 4
     nperseg = 5000
 
     differential_evolution_kwargs = {
-        'strategy': 'best1bin',
-        'popsize': 15,
+        'strategy': 'rand1exp',
         'tol': 1e-8,
-        'maxiter': 200,
-        'recombination': 0.9,
-        'mutation': (0.4, 0.8),
-        'polish': False,
+        'maxiter': 150,
+        'recombination': 0.6,
+        'mutation': (0.5, 0.7),
+        'polish': True,
         'disp': True,
-        'workers': 2,
+        'workers': -1,
         'updating': 'deferred',
-        'init': 'latinhypercube',
-    } 
-
+        'init': 'sobol',
+    }
     analysis = TimeFreqSNR(
         data_t_truncated,
         wave_gen=wave_gen,

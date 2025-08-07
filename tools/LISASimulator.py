@@ -6,6 +6,7 @@ import scipy as sp
 from lisatools.sensitivity  import AE1SensitivityMatrix, AET1SensitivityMatrix, get_sensitivity
 from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
+#import cupy as cp
 
 def get_hh(signal, sens_mat, df, exclude_T_channel=False):
     """

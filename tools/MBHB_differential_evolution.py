@@ -261,7 +261,7 @@ class MBHB_finder_time_frequency:
         Returns:
         - -SNR: the negative SNR value, as we want to minimize the SNR.
         """
-        
+        #start_time = time.time()
         # Combine fixed and variable parameters into a single array of 11 parameters
         parameters_11 = []
         variable_parameter_index = 0
@@ -272,12 +272,14 @@ class MBHB_finder_time_frequency:
                 parameters_11.append(variable_parameters[variable_parameter_index])
                 variable_parameter_index += 1
         parameters_11 = np.array(parameters_11)
-        
+        #print("Time to combine parameters:", time.time() - start_time)
         # Transform to BBHX parameters
         parameters_bbhx = transform_parameters_to_bbhx(parameters_11, self.cutoff_time)
 
         # Generate the waveform template with parameters_bbhx and remove the T channel
         template_f = self.wave_gen(*parameters_bbhx, **self.waveform_kwargs)[0]
+        #print("Time to generate waveform template:", time.time() - start_time)
+        #start_time = time.time()
         template_f = template_f[:2] # remove T channel
         template_t = np.fft.irfft(template_f, axis=-1)
 
@@ -288,11 +290,11 @@ class MBHB_finder_time_frequency:
         # Calculate the STFT of the template
         Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
         Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
-
+        #print("Time to calculate STFT of template:", time.time() - start_time)
         # Calculate the inner products for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
-
+        #print("Time to calculate inner products:", time.time() - start_time)
         # Return the negative SNR value, as we want to minimize the SNR
         return - dh / np.sqrt(hh)
 
@@ -318,8 +320,9 @@ class MBHB_finder_time_frequency:
         for search_index in range(number_of_searches):
 
             self.history = [] 
-            
-            initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
+
+            if differential_evolution_kwargs['init'] != 'sobol':
+                differential_evolution_kwargs['x0'] = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])   # Random initial guess for the 10 parameters (all except dL & f_ref)
 
             #time_start = time.time()
             #SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
@@ -330,7 +333,6 @@ class MBHB_finder_time_frequency:
             
             results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
                                                         bounds=bounds,                                          # Bounds for the 10 parameters (all except dL & f_ref)
-                                                        #x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
                                                         args=(fixed_parameters,),
                                                         **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
                                                         callback=self.callback,   # <--- here
