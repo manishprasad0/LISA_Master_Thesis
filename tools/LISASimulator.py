@@ -76,7 +76,7 @@ class LISASimulator:
         """
 
         if seed is not None:
-            np.random.seed(seed)
+            rng = np.random.default_rng(seed)
 
         if self.include_T_channel:
             if include_sens_kwargs:
@@ -94,8 +94,8 @@ class LISASimulator:
         self.sens_mat = sens_mat
         noises = []
         for sens_fn in sens_mat.sens_mat:
-            noise = np.fft.irfft(np.random.normal(0.0, np.sqrt(sens_fn))
-                                +1j * np.random.normal(0.0, np.sqrt(sens_fn))
+            noise = np.fft.irfft(rng.normal(0.0, np.sqrt(sens_fn))
+                                +1j * rng.normal(0.0, np.sqrt(sens_fn))
                                 ) /np.sqrt(self.dt*4/self.N)
             noises.append(noise) 
         noises = np.array(noises)
