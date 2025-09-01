@@ -30,6 +30,10 @@ print(f"RAM Usage: {mem.percent}%")
 print("Number of CPU cores:", mp.cpu_count())
 
 def main():
+    # Set up multiprocessing
+    # mp.set_start_method('fork', force=True)
+    
+    # Simulation parameters
     Tobs = 2*(YRSID_SI/12)
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
@@ -44,18 +48,17 @@ def main():
     dist = 10 * PC_SI * 1e9
     phi_ref = 0.0 #np.pi/2
     f_ref = 0.0
-    inc = 0.224
-    lam = 60*(np.pi/180)
-    beta = 20*(np.pi/180)
+    inc = 1.224
+    lam = 3.509
+    beta = 1.292
     psi = 0
-    t_ref = 0.95 * Tobs # - (24*60*60)
+    t_ref = 0.95 * Tobs
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
     modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
     waveform_kwargs = dict(length=1024, direct=False, fill=True, squeeze=False, modes=modes)
 
     data_t, data_f, f_array, t_array, sens_mat = sim(seed = 42, parameters=parameters, waveform_kwargs=waveform_kwargs)
     waveform_kwargs.update(freqs=f_array)
-    print("The SNR of the signal is", sim.SNR_optimal()[0])
 
     # Pre-merger settings
     hours_before_merger = 10
@@ -90,23 +93,39 @@ def main():
     number_of_searches = 1
     nperseg = 5000
 
+    # make population around transformed_true_tref
+    transformed_true = transform_bbhx_to_parameters(parameters, cutoff_time)
+    transformed_t_ref = transformed_true[-1]
+    
+    population = []
+    for i in range(popsize * dim):
+        candidate = []
+        for j, (low, high) in enumerate(bounds):
+            span = high - low
+            if j < 9:
+                # first 9 parameters: uniform within bounds
+                val = np.random.uniform(low, high)
+            else:
+                # last parameter: normal perturbation around x0[-1]
+                val = transformed_t_ref + np.random.normal(scale=perturb_scale * span)
+                val = np.clip(val, low, high)
+            candidate.append(val)
+        population.append(candidate)
+    population = np.array(population)
+
     differential_evolution_kwargs = {
+        'init': population,            # great for initial run, space-filling
+        'polish': True,             # yes, lets L-BFGS-B finish up
+        'disp': True,               # monitor progress
         'strategy': 'rand1exp',     # good default; 'best1exp' can converge faster but risks premature convergence
         'popsize': 15,              # decent; you could try 20 if evaluations are cheap, more diversity
         'tol': 1e-6,                # loosen a bit; 1e-8 is *very* strict and often wastes iterations
-        'maxiter': 100,            # give it more room for global exploration
-        'recombination': 0.6,       # lower than 1.0 usually helps maintain diversity
-        'mutation': (0.5, 0.8),     # broader range → larger jumps for exploration
-        'polish': False,             # yes, lets L-BFGS-B finish up
-        'disp': True,               # monitor progress
-        'workers': 3,               # parallelism, good
-        'updating': 'deferred',     # efficient with multiple workers
-        'init': 'sobol',            # great for initial run, space-filling
+        'maxiter': 1000,            # give it more room for global exploration
+        'recombination': 0.7,       # lower than 1.0 usually helps maintain diversity
+        'mutation': (0.7, 1.5),     # broader range → larger jumps for exploration
+        'workers': -1,              # parallelism, good
+        'updating': 'deferred',     # efficient with multiple workers   
     }
-
-
-    #x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/tf_run_20250820_132453.npz')["result_x"]
-    #differential_evolution_kwargs.update({'x0': x0})
     
     fixed_parameters = {
         #'Total_Mass': np.log(m1 + m2),
@@ -133,6 +152,7 @@ def main():
     analysis.get_stft_of_data()
     true_snr, amplitude = analysis.calculate_time_frequency_SNR(*parameters, waveform_kwargs=waveform_kwargs)
     new_distance = dist /  amplitude
+    print((new_distance - dist)/(PC_SI*1e9) , (new_distance-dist)/dist)
     print( "True distance       = ",  dist/(PC_SI*1e9), "Gpc")
     print( "Dist from Amplitude = ",  new_distance/(PC_SI*1e9), "Gpc")
     print( "SNR calculated      = ",  true_snr)
