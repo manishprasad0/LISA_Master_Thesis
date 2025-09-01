@@ -30,7 +30,11 @@ print(f"RAM Usage: {mem.percent}%")
 print("Number of CPU cores:", mp.cpu_count())
 
 def main():
-    Tobs = 1*(YRSID_SI/12)
+    # Set up multiprocessing
+    # mp.set_start_method('fork', force=True)
+    
+    # Simulation parameters
+    Tobs = 2*(YRSID_SI/12)
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
 
@@ -42,20 +46,19 @@ def main():
     a1 = 0.753
     a2 = 0.621
     dist = 10 * PC_SI * 1e9
-    phi_ref = 0.0 #np.pi/2
+    phi_ref = 0.0
     f_ref = 0.0
-    inc = 0.224
-    lam = 60*(np.pi/180)
-    beta = 20*(np.pi/180)
+    inc = 1.224
+    lam = 3.509
+    beta = 1.292
     psi = 0
-    t_ref = Tobs - (24*60*60)
+    t_ref = 0.95 * Tobs
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
     modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
     waveform_kwargs = dict(length=1024, direct=False, fill=True, squeeze=False, modes=modes)
 
     data_t, data_f, f_array, t_array, sens_mat = sim(seed = 42, parameters=parameters, waveform_kwargs=waveform_kwargs)
     waveform_kwargs.update(freqs=f_array)
-    print("The SNR of the signal is", sim.SNR_optimal()[0])
 
     # Pre-merger settings
     hours_before_merger = 10
@@ -88,15 +91,15 @@ def main():
     boundaries['Coalescence_Time'] = [0, (max_time - cutoff_time)/(60*60*width_of_tref_prior)]    # Prior of 24 hours
 
     number_of_searches = 1
-    nperseg = 1414
+    nperseg = 5000
 
     differential_evolution_kwargs = {
         'strategy': 'rand1exp',     # good default; 'best1exp' can converge faster but risks premature convergence
         'popsize': 15,              # decent; you could try 20 if evaluations are cheap, more diversity
         'tol': 1e-6,                # loosen a bit; 1e-8 is *very* strict and often wastes iterations
-        'maxiter': 100,            # give it more room for global exploration
-        'recombination': 0.6,       # lower than 1.0 usually helps maintain diversity
-        'mutation': (0.5, 0.8),     # broader range → larger jumps for exploration
+        'maxiter': 1500,             # give it more room for global exploration
+        'recombination': 0.7,       # lower than 1.0 usually helps maintain diversity
+        'mutation': (0.7, 1.5),     # broader range → larger jumps for exploration
         'polish': True,             # yes, lets L-BFGS-B finish up
         'disp': True,               # monitor progress
         'workers': 3,               # parallelism, good
@@ -133,6 +136,7 @@ def main():
     analysis.get_stft_of_data()
     true_snr, amplitude = analysis.calculate_time_frequency_SNR(*parameters, waveform_kwargs=waveform_kwargs)
     new_distance = dist /  amplitude
+    #print((new_distance - dist)/(PC_SI*1e9) , (new_distance-dist)/dist)
     print( "True distance       = ",  dist/(PC_SI*1e9), "Gpc")
     print( "Dist from Amplitude = ",  new_distance/(PC_SI*1e9), "Gpc")
     print( "SNR calculated      = ",  true_snr)
@@ -167,9 +171,6 @@ def main():
     
     print(DifferentialEvolution_time_frequency)
     
-    found_tref = transform_parameters_to_bbhx(found_parameters_tf, cutoff_time=cutoff_time)[-1]
-    print(found_tref, t_ref, found_tref - t_ref)
-
     save_de_results(
         found_parameters_tf,
         found_snr_found_tf,

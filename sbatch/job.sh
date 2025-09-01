@@ -9,10 +9,12 @@
 source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_env
 
+echo "RUN 6 : FINDING T_REF"
+echo "maxiter = 100"
+echo "diff_evolution.py = 1 month, 60 deg, 20 deg"
+echo "recombination: 0.6"
+echo "mutation: (0.5, 0.8)"
 echo "cpus-per-task=32, mem-per-cpu=3G, workers=3"
-echo "used old diff_evol kwargs settings from github"
-echo "'maxiter': 100 for testing to see how long it takes"
-echo "nperseg = 5000, reduced observation time to 1 month"
-echo "reduced maxiter to 100 to see speed"
+echo "nperseg = 1414, reduced observation time to 1 month" 
 
 python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/diff_evolution.py
