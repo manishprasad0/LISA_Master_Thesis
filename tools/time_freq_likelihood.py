@@ -11,7 +11,7 @@ from typing import Any, Tuple, Optional, List
 
 # RIGHT NOW MAKING THIS ONLY FOR A AND E CHANNELS, NOT T CHANNEL
 # class TimeFreqLikelihood is like the AnalysisContainer class in lisatools, but it is specifically designed for time-frequency likelihood calculations.
-class TimeFreqLikelihood:
+class   TimeFreqLikelihood:
     def __init__(self, data_t, wave_gen, nperseg = 15000, dt_full=5.0):
         self.data_t = data_t
         self.wave_gen = wave_gen

@@ -42,7 +42,7 @@ def transform_parameters_to_bbhx(x_11: np.ndarray, cutoff_time=None) -> np.ndarr
     all_parameters[8] = x_11[7]
     all_parameters[9] = np.arcsin(x_11[8])
     all_parameters[10] = x_11[9]
-    all_parameters[11] = x_11[10] + cutoff_time if cutoff_time is not None else x_11[10]  # Add cutoff_time to t_ref if provided, otherwise keep it as is
+    all_parameters[11] = cutoff_time + x_11[10]*(60*60*24) if cutoff_time is not None else x_11[10]
     return all_parameters
 
 def transform_bbhx_to_parameters(x: np.ndarray, cutoff_time=None) -> np.ndarray:
@@ -62,7 +62,7 @@ def transform_bbhx_to_parameters(x: np.ndarray, cutoff_time=None) -> np.ndarray:
     all_parameters[7] = x[8]
     all_parameters[8] = np.sin(x[9])
     all_parameters[9] = x[10]
-    all_parameters[10] = x[11] - cutoff_time if cutoff_time is not None else x[11]  # Subtract cutoff_time from t_ref if provided, otherwise keep it as is
+    all_parameters[10] = (x[11] - cutoff_time)/(60*60*24) if cutoff_time is not None else x[11]  # Subtract cutoff_time from t_ref if provided, otherwise keep it as is
     return all_parameters
 
 class MBHB_finder_time_frequency:
@@ -321,8 +321,8 @@ class MBHB_finder_time_frequency:
 
             self.history = [] 
 
-            if differential_evolution_kwargs['init'] != 'sobol':
-                differential_evolution_kwargs['x0'] = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])   # Random initial guess for the 10 parameters (all except dL & f_ref)
+            #if differential_evolution_kwargs['init'] != 'sobol':
+            #    differential_evolution_kwargs['x0'] = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])   # Random initial guess for the 10 parameters (all except dL & f_ref)
 
             #time_start = time.time()
             #SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
@@ -384,6 +384,18 @@ class MBHB_finder_time_frequency:
         self.SNR_max = SNR_max
 
         return found_parameters_11_max, SNR_max, results_max, parameters_history_max
+    
+
+
+
+
+
+
+
+
+
+
+
     
 
 class MBHB_finder_frequency_domain:

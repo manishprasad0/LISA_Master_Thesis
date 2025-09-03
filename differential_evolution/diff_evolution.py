@@ -73,7 +73,7 @@ def main():
 
     data_t_truncated, cutoff_index =  pre_merger(data_t, time_before_merger, t_ref, t_array)
 
-    # Differential Evolution Analysis
+    # Differential Evolution
     boundaries = {}
     boundaries['Total_Mass'] = [np.log(1e5), np.log(1e6)]   
     boundaries['Mass_Ratio'] = [0.05, 0.999999]
