@@ -87,39 +87,31 @@ def main():
     boundaries['Polarization'] = [0, np.pi]
     boundaries['Coalescence_Time'] = [0, (max_time - cutoff_time)/(60*60*width_of_tref_prior)]    # Prior of 24 hours
 
+    fixed_parameters = {'Distance': boundaries['Distance'][0] + 0.5 * (boundaries['Distance'][1] - boundaries['Distance'][0])}
+
     number_of_searches = 1
     nperseg = 1414
+    
+    parameter_names = list(boundaries.keys())
+    variable_parameter_names = [name for name in parameter_names if name not in fixed_parameters]
+    bounds = np.array([boundaries[name] for name in variable_parameter_names])
+    t_ref_found = 0.400195
+    random_sample = np.random.uniform(size=bounds.shape[0])  # shape (n_parameters,)
+    x0 = random_sample * (bounds[:,1] - bounds[:,0]) + bounds[:,0]
+    x0[-1] = t_ref_found
 
     differential_evolution_kwargs = {
-        'strategy': 'rand1exp',     # good default; 'best1exp' can converge faster but risks premature convergence
-        'popsize': 15,              # decent; you could try 20 if evaluations are cheap, more diversity
-        'tol': 1e-6,                # loosen a bit; 1e-8 is *very* strict and often wastes iterations
-        'maxiter': 100,            # give it more room for global exploration
-        'recombination': 0.6,       # lower than 1.0 usually helps maintain diversity
-        'mutation': (0.5, 0.8),     # broader range → larger jumps for exploration
-        'polish': True,             # yes, lets L-BFGS-B finish up
-        'disp': True,               # monitor progress
-        'workers': 3,               # parallelism, good
-        'updating': 'deferred',     # efficient with multiple workers
-        'init': 'sobol',            # great for initial run, space-filling
-    }
-
-
-    #x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/tf_run_20250820_132453.npz')["result_x"]
-    #differential_evolution_kwargs.update({'x0': x0})
-    
-    fixed_parameters = {
-        #'Total_Mass': np.log(m1 + m2),
-        #'Mass_Ratio': m2 / m1,
-        #'Spin1': a1,
-        #'Spin2': a2,
-        'Distance': boundaries['Distance'][0] + 0.5 * (boundaries['Distance'][1] - boundaries['Distance'][0]), # Always include distance in fixed parameters
-        #'Phase': phi_ref,
-        #'cos(Inclination)': np.cos(inc),
-        #'Ecliptic_Longitude': lam,
-        #'sin(Ecliptic_Latitude)': np.sin(beta),
-        #'Polarization': psi,
-        'Coalescence_Time': 0.410481
+        'strategy': 'best1exp',
+        'popsize': 15,
+        'tol': 1e-8,
+        'maxiter': 1500,
+        'polish': True,
+        'disp': True,
+        'workers': 3,
+        'updating': 'deferred',
+        'recombination': 0.7,       # lower than 1.0 usually helps maintain diversity
+        'mutation': (0.5, 1.5),
+        'x0': x0
     }
 
     analysis = TimeFreqSNR(
@@ -130,6 +122,7 @@ def main():
         cutoff_index=cutoff_index,
         pre_merger=True
     )
+
     analysis.get_stft_of_data()
     true_snr, amplitude = analysis.calculate_time_frequency_SNR(*parameters, waveform_kwargs=waveform_kwargs)
     new_distance = dist /  amplitude

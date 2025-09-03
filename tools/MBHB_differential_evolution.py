@@ -321,8 +321,8 @@ class MBHB_finder_time_frequency:
 
             self.history = [] 
 
-            if differential_evolution_kwargs['init'] != 'sobol':
-                differential_evolution_kwargs['x0'] = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])   # Random initial guess for the 10 parameters (all except dL & f_ref)
+            #if differential_evolution_kwargs['init'] != 'sobol':
+            #    differential_evolution_kwargs['x0'] = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])   # Random initial guess for the 10 parameters (all except dL & f_ref)
 
             #time_start = time.time()
             #SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
