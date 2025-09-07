@@ -119,7 +119,7 @@ def main():
         r"$\lambda$",
         r"$\sin(\beta)$",
         r"$\psi$",
-        r"$t_{\mathrm{c}} \, [\mathrm{hrs}]$"
+        r"$t_{\mathrm{c}} \, [\mathrm{s}]$"
     ]
 
     # Results from Differential Evolution
@@ -128,7 +128,7 @@ def main():
         mT_exp = np.exp(mT)
         dist_Mpc = dist_Gpc 
         phi_ref = phi_ref % (2*np.pi)
-        time_to_coalescence = t_ref_01 * 24
+        time_to_coalescence = t_ref_01 * (60*60*24) + cutoff_time
         return np.array([mT_exp, q, a1, a2, dist_Mpc, phi_ref, cos_inc, lam, sin_beta, psi, time_to_coalescence])
         
     def likelihood(x, freqs, TimeFreqLikelihood_object, cutoff_time):
@@ -146,7 +146,7 @@ def main():
         all_parameters[8] = x[7]
         all_parameters[9] = np.arcsin(x[8])
         all_parameters[10] = x[9]
-        all_parameters[11] = x[10] + cutoff_time
+        all_parameters[11] = x[10]
 
         ll = TimeFreqLikelihood_object.calculate_time_frequency_likelihood(
             *all_parameters,
@@ -172,7 +172,7 @@ def main():
         7 : uniform_dist(0.0, 2 * np.pi),            # lam
         8 : uniform_dist(-1.0, 1.0),                 # sin(beta)
         9 : uniform_dist(0.0, np.pi),                # psi
-        10: uniform_dist(0, width_of_tref_prior),    # t_ref
+        10: uniform_dist(cutoff_time, max_time),    # t_ref
     })}
 
     periodic = {"mbh": {5: 2 * np.pi,   # phi_ref
@@ -191,18 +191,20 @@ def main():
         periodic=periodic
     )
 
-    injection_parameters = np.array([m1+m2, m2/m1, a1, a2, dist / (PC_SI * 1e9), phi_ref, np.cos(inc), lam, np.sin(beta), psi, (t_ref-cutoff_time)/(60*60)])
+    injection_parameters = np.array([m1+m2, m2/m1, a1, a2, dist / (PC_SI * 1e9), phi_ref, np.cos(inc), lam, np.sin(beta), psi, t_ref])
 
     x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/tf_run_20250902_183628.npz')
     found_parameters_DE = DE_to_MCMC_params(x0['found_parameters'], cutoff_time=cutoff_time)
     found_SNR = x0['found_snr']
     print("Parameters from Differential Evolution: ", found_parameters_DE)
     print("SNR from Differential Evolution: ", found_SNR)
+    print("Found t_ref: ", found_parameters_DE[-1])
+    print("True  t_ref: ", injection_parameters[-1])
 
     starting_points = np.zeros(shape=[ntemps, nwalkers, nleaves_max, found_parameters_DE.shape[0]])
 
     # Perturb the injection parameters to create starting points for the walkers
-    perturb_frac = 0.001
+    perturb_frac = 1e-5
 
     non_periodic_params = [0, 1, 2, 3, 4, 6, 7, 8, 10]  # indices of non-periodic parameters
 
@@ -237,10 +239,6 @@ def main():
     mcmc_results_folder = "mcmc_results"
     folder_name = f"{mcmc_results_folder}/run_{timestamp}"
     os.makedirs(folder_name, exist_ok=True)
-
-    fig.savefig(f"{folder_name}/example_plot.png", dpi=300)
-
-
 
 
     np.save(f"{folder_name}/chain.npy", mcmc_results)
