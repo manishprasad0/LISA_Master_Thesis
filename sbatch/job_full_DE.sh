@@ -16,4 +16,4 @@ echo "actually stefan's kwargs"
 echo "cpus-per-task=32, mem-per-cpu=3G, workers=3"
 echo "nperseg = 1414, reduced observation time to 1 month" 
 
-python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/DE_find_tref.py
+python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/DE_full.py

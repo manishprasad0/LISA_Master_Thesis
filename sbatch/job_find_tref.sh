@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=thesis               # Job name
+#SBATCH --job-name=thesis
 #SBATCH --account=root
 #SBATCH --time=1-00:00:00            
 #SBATCH --partition=normal           
@@ -9,12 +9,13 @@
 source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_env
 
-echo "RUN 6 : FINDING T_REF"
+echo "RUN 1 : FINDING T_REF"
+echo "Time before merger = 15 hours"
 echo "maxiter = 100"
 echo "diff_evolution.py = 1 month, 60 deg, 20 deg"
 echo "recombination: 0.6"
 echo "mutation: (0.5, 0.8)"
 echo "cpus-per-task=32, mem-per-cpu=3G, workers=3"
-echo "nperseg = 1414, reduced observation time to 1 month" 
+echo "nperseg = 1414, reduced observation time to 1.2 month" 
 
-python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/diff_evolution.py #> /users/prasadm/LISA_Master_Thesis/slurm_differential_evolution/slurm-$(date +'%d-%m-%Y_%H-%M-%S').out
+python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/DE_find_tref.py #> /users/prasadm/LISA_Master_Thesis/slurm_differential_evolution/slurm-$(date +'%d-%m-%Y_%H-%M-%S').out
