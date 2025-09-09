@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import multiprocessing as mp
+import scipy as sp
 import time
 from datetime import datetime
 
@@ -34,26 +35,12 @@ from scipy.stats import truncnorm
 from chainconsumer import Chain, ChainConsumer, make_sample, Truth
 import pandas as pd
 
-gpu = False
-#if gpu:
-#    import cupy as cp
-#else:
-    #import numpy as cp
-
-#import psutil
-#mem = psutil.virtual_memory()
-#print(f"Total RAM: {mem.total / (1024 ** 3):.2f} GB")
-#print(f"Available RAM: {mem.available / (1024 ** 3):.2f} GB")
-#print(f"Used RAM: {mem.used / (1024 ** 3):.2f} GB")
-#print(f"RAM Usage: {mem.percent}%")
-#print("Number of CPU cores:", mp.cpu_count())
-
 def main():
     Tobs = 1.2*YRSID_SI/12
     dt = 5.
     include_T_channel = False
 
-    wave_gen = BBHWaveformFD(amp_phase_kwargs=dict(run_phenomd=False), use_gpu=gpu)
+    wave_gen = BBHWaveformFD(amp_phase_kwargs=dict(run_phenomd=False), use_gpu=False)
     sim = LISASimulator(Tobs=Tobs, dt=dt, wave_gen=wave_gen, include_T_channel=include_T_channel)
 
     m1 = 3e5
@@ -75,7 +62,7 @@ def main():
     data_t, data_f, f_array, t_array, sens_mat = sim(seed = 42, parameters=parameters, waveform_kwargs=waveform_kwargs)
     waveform_kwargs.update(freqs=f_array)
 
-    print(sim.SNR_optimal()[0])
+    print(f"SNR of the Signal: {sim.SNR_optimal()[0]}")
 
     # Pre-merger settings
     hours_before_merger = 10
@@ -85,26 +72,18 @@ def main():
     max_time = t_ref + (width_of_tref_prior - hours_before_merger)*60*60
     nperseg = 1414
 
-    def pre_merger(gravitational_wave_data_t, time_before_merger, t_ref, t_array):
-            cutoff_time = t_ref - time_before_merger
-            cutoff_index = np.searchsorted(t_array, cutoff_time)
-            data_t_truncated = gravitational_wave_data_t[:, :cutoff_index]
-            return data_t_truncated, cutoff_index
-
-    data_t_truncated, cutoff_index =  pre_merger(data_t, time_before_merger, t_ref, t_array)
-
-    # MCMC
+    # TimeFreqLikelihood Object
     analysis = TimeFreqLikelihood(data_t=data_t, wave_gen=wave_gen, nperseg=nperseg)
     analysis.pre_merger(time_before_merger=time_before_merger, t_ref=t_ref, t_array=t_array)
     analysis.get_stft_of_data()
-    print("Best likelihood (true parameters)= ", analysis.calculate_time_frequency_likelihood(*parameters, waveform_kwargs=waveform_kwargs))
+    print("Likelihood with the true parameters = ", analysis.calculate_time_frequency_likelihood(*parameters, waveform_kwargs=waveform_kwargs))
 
     # MCMC parameters
     nwalkers = 24
     ntemps = 4
     ndims = 11
     nleaves_max = 1
-    nsteps = 1000
+    nsteps = 10
     perturb_frac = 0.01
 
     param_labels = [
@@ -118,19 +97,10 @@ def main():
         r"$\lambda$",
         r"$\sin(\beta)$",
         r"$\psi$",
-        r"$t_{\mathrm{c}} \, [\mathrm{hrs}]$"
+        r"$t_{\mathrm{c}} \, [\mathrm{s}]$"
     ]
-
-    # Results from Differential Evolution
-    def DE_to_MCMC_params(found_parameters_DE, cutoff_time):
-        mT, q, a1, a2, dist_Gpc, phi_ref, cos_inc, lam, sin_beta, psi, t_ref_01 = found_parameters_DE
-        mT_exp = np.exp(mT)
-        dist_Mpc = dist_Gpc 
-        phi_ref = phi_ref % (2*np.pi)
-        time_to_coalescence = t_ref_01 * 24
-        return np.array([mT_exp, q, a1, a2, dist_Mpc, phi_ref, cos_inc, lam, sin_beta, psi, time_to_coalescence])
-        
-    def likelihood(x, freqs, TimeFreqLikelihood_object, cutoff_time):
+    
+    def likelihood(x, freqs, TimeFreqLikelihood_object):
         all_parameters = np.zeros(12)
         mT = x[0]
         q = x[1]
@@ -145,7 +115,7 @@ def main():
         all_parameters[8] = x[7]
         all_parameters[9] = np.arcsin(x[8])
         all_parameters[10] = x[9]
-        all_parameters[11] = x[10] + cutoff_time
+        all_parameters[11] = x[10]
 
         ll = TimeFreqLikelihood_object.calculate_time_frequency_likelihood(
             *all_parameters,
@@ -162,21 +132,21 @@ def main():
     
     priors = {"mbh": ProbDistContainer({
         0 : uniform_dist(1e5, 1e6),                  # mT = m1 + m2
-        1 : uniform_dist(0.01, 0.99),            # q = m2/m1
-        2 : uniform_dist(-1, +1),  # a1
-        3 : uniform_dist(-1, +1),  # a2
-        4 : uniform_dist(1, 50),                 # dist in Mpc
-        5 : uniform_dist(0, 2*np.pi),            # phi_ref
+        1 : uniform_dist(0.01, 0.99),                # q = m2/m1
+        2 : uniform_dist(-1, +1),                    # a1
+        3 : uniform_dist(-1, +1),                    # a2
+        4 : uniform_dist(1, 50),                     # dist in Mpc
+        5 : uniform_dist(0, 2*np.pi),                # phi_ref
         6 : uniform_dist(-1, 1),                     # cos(inc)
         7 : uniform_dist(0.0, 2 * np.pi),            # lam
         8 : uniform_dist(-1.0, 1.0),                 # sin(beta)
         9 : uniform_dist(0.0, np.pi),                # psi
-        10: uniform_dist(0, width_of_tref_prior),     # t_ref
+        10: uniform_dist(cutoff_time, max_time),     # t_ref
     })}
 
-    periodic = {"mbh": {5: 2 * np.pi,   # phi_ref
-                        7: 2 * np.pi,   # lam
-                        9: np.pi  }}    # psi
+    periodic = {"mbh": {5: 2 * np.pi,                # phi_ref
+                        7: 2 * np.pi,                # lam
+                        9: np.pi  }}                 # psi
     
     sampler = EnsembleSampler(
         nwalkers,
@@ -189,15 +159,22 @@ def main():
         nleaves_max=dict(mbh = nleaves_max),
         periodic=periodic
     )
-    from scipy.stats import truncnorm
 
-    injection_parameters = np.array([m1+m2, m2/m1, a1, a2, dist / (PC_SI * 1e9), phi_ref, np.cos(inc), lam, np.sin(beta), psi, (t_ref-cutoff_time)/(60*60)])
+    injection_parameters = np.array([m1+m2, m2/m1, a1, a2, dist / (PC_SI * 1e9), phi_ref, np.cos(inc), lam, np.sin(beta), psi, t_ref])
 
-    from tools.MBHB_differential_evolution import transform_parameters_to_bbhx
+    # Results from Differential Evolution
+    def DE_to_MCMC_params(found_parameters_DE, cutoff_time):
+        mT, q, a1, a2, dist_Gpc, phi_ref, cos_inc, lam, sin_beta, psi, t_ref_01 = found_parameters_DE
+        mT_exp = np.exp(mT)
+        dist_Mpc = dist_Gpc 
+        phi_ref = phi_ref % (2*np.pi)
+        time_to_coalescence = t_ref_01 * (60*60*24) + cutoff_time
+        return np.array([mT_exp, q, a1, a2, dist_Mpc, phi_ref, cos_inc, lam, sin_beta, psi, time_to_coalescence])
 
     x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/tf_run_20250902_183628.npz')
     found_parameters_DE = DE_to_MCMC_params(x0['found_parameters'], cutoff_time=cutoff_time)
     found_SNR = x0['found_snr']
+    print("SNR of DE result = ", found_SNR)
 
     starting_points = np.zeros(shape=[ntemps, nwalkers, nleaves_max, found_parameters_DE.shape[0]])
 
