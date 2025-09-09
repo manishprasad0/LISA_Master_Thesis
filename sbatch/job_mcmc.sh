@@ -10,5 +10,6 @@ source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_env
 
 echo "1000 steps"
+echo "perturbation = 1e-3"
 
 python -u /users/prasadm/LISA_Master_Thesis/mcmc.py

@@ -17,4 +17,4 @@ echo "mutation: (0.5, 0.8)"
 echo "cpus-per-task=32, mem-per-cpu=3G, workers=3"
 echo "nperseg = 1414, reduced observation time to 1 month" 
 
-python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/diff_evolution.py
+python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/diff_evolution.py #> /users/prasadm/LISA_Master_Thesis/slurm_differential_evolution/slurm-$(date +'%d-%m-%Y_%H-%M-%S').out

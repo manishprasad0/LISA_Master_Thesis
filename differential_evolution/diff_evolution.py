@@ -119,7 +119,7 @@ def main():
         #'Ecliptic_Longitude': lam,
         #'sin(Ecliptic_Latitude)': np.sin(beta),
         #'Polarization': psi,
-        'Coalescence_Time': 0.410481
+        #'Coalescence_Time': 0.410481
     }
 
     analysis = TimeFreqSNR(

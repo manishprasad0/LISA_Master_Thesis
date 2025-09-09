@@ -204,7 +204,7 @@ def main():
     starting_points = np.zeros(shape=[ntemps, nwalkers, nleaves_max, found_parameters_DE.shape[0]])
 
     # Perturb the injection parameters to create starting points for the walkers
-    perturb_frac = 1e-5
+    perturb_frac = 1e-3
 
     non_periodic_params = [0, 1, 2, 3, 4, 6, 7, 8, 10]  # indices of non-periodic parameters
 
