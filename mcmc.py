@@ -36,7 +36,7 @@ from chainconsumer import Chain, ChainConsumer, make_sample, Truth
 import pandas as pd
 
 def main():
-    Tobs = 1.2*YRSID_SI/12
+    Tobs = 1.5*YRSID_SI/12
     dt = 5.
     include_T_channel = False
 
@@ -65,7 +65,7 @@ def main():
     print(f"SNR of the Signal: {sim.SNR_optimal()[0]}")
 
     # Pre-merger settings
-    hours_before_merger = 10
+    hours_before_merger = 14
     time_before_merger = hours_before_merger*60*60
     cutoff_time = t_ref - time_before_merger
     width_of_tref_prior = 20
@@ -129,7 +129,7 @@ def main():
             )
         )
         return ll
-    
+
     priors = {"mbh": ProbDistContainer({
         0 : uniform_dist(1e5, 1e6),                  # mT = m1 + m2
         1 : uniform_dist(0.01, 0.99),                # q = m2/m1
@@ -153,7 +153,7 @@ def main():
         ndims,
         likelihood,
         priors,
-        args=(f_array, analysis, cutoff_time),
+        args=(f_array, analysis),
         branch_names=["mbh"],
         tempering_kwargs=dict(ntemps = ntemps),
         nleaves_max=dict(mbh = nleaves_max),
@@ -171,10 +171,11 @@ def main():
         time_to_coalescence = t_ref_01 * (60*60*24) + cutoff_time
         return np.array([mT_exp, q, a1, a2, dist_Mpc, phi_ref, cos_inc, lam, sin_beta, psi, time_to_coalescence])
 
-    x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/tf_run_20250902_183628.npz')
+    x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/tf_run_20250915_094350.npz')
     found_parameters_DE = DE_to_MCMC_params(x0['found_parameters'], cutoff_time=cutoff_time)
     found_SNR = x0['found_snr']
     print("SNR of DE result = ", found_SNR)
+    print("Parameters from DE = ", found_parameters_DE)
 
     starting_points = np.zeros(shape=[ntemps, nwalkers, nleaves_max, found_parameters_DE.shape[0]])
 
@@ -202,67 +203,15 @@ def main():
     sampler.run_mcmc(starting_state, nsteps=nsteps, progress=True)
 
     mcmc_results = sampler.get_chain()["mbh"]
-    np.save("mcmc_results/chain.npy", mcmc_results)
-
     samples = mcmc_results[:, 0].reshape(-1, 11)
     df = pd.DataFrame(samples, columns=param_labels)
 
-    # Full Corner Plot
-    c = ChainConsumer() 
-    c.add_chain(Chain(samples=df, name="MCMC Results"))
-    c.add_truth(Truth(location = dict(zip(param_labels[:11], injection_parameters[:11]))))
-    fig_corner_plot = c.plotter.plot()
-    fig_corner_plot.savefig("mcmc_results/mcmc_corner_plot.png", dpi=300)
+    if not os.path.exists("mcmc_results"):
+        os.makedirs("mcmc_results")
 
-    # Corner Plot for lam, beta, tc
-    new_df = df[[param_labels[7], param_labels[8], param_labels[10]]]
-    new_injection_parameters = injection_parameters[[7, 8, 10]]
+    file_name = datetime.now().strftime("%Y%m%d_%H%M%S") 
+    df.to_pickle(f"mcmc_results/mcmc_run_{file_name}.pkl")
 
-    new_c = ChainConsumer() 
-    new_c.add_chain(Chain(samples=new_df, name="MCMC Results"))
-    new_c.add_truth(Truth(location={param_labels[7]: new_injection_parameters[0],
-                                    param_labels[8]: new_injection_parameters[1],
-                                    param_labels[10]: new_injection_parameters[2]}))
-    fig_corner_plot_lam_beta_tc = new_c.plotter.plot()
-    fig_corner_plot_lam_beta_tc.savefig("mcmc_results/mcmc_corner_plot_lam_beta_tc.png", dpi=300)
-
-    
-    # Trace plots
-    plotting_walkers_range = nwalkers
-    colors = cm.viridis(np.linspace(0, 1, plotting_walkers_range))
-
-    fig_walkers, ax_walkers = plt.subplots(ndims, 1, sharex=True, figsize=(10, 2.5 * ndims))
-    fig_walkers.subplots_adjust(hspace=0.3)
-
-    for i in range(ndims):
-        ax_walkers[i].axhline(injection_parameters[i], color='red', linestyle='--', linewidth=1.2, label="True value")
-        for walk in range(plotting_walkers_range):
-            ax_walkers[i].plot(mcmc_results[:, 0, walk, :, i].flatten(), color=colors[walk], alpha=0.6, linewidth=0.8)
-        #ax[i].axhline(starting_points[0, walk, :, i], color='blue', linestyle='--', linewidth=1.2, label="Starting point of the last walker")
-
-        ax_walkers[i].set_ylabel(param_labels[i], fontsize=12)
-        #ax[i].legend(loc='upper right', fontsize=10)
-
-    ax_walkers[-1].set_xlabel("Number of steps", fontsize=12)
-
-    for axis in ax_walkers:
-        axis.set_xlim(0, nsteps-1)
-    fig_walkers.savefig("mcmc_results/mcmc_trace_plots.png", dpi=300)
-
-    log_like_samples = sampler.get_log_like() 
-
-    fig_log_like, ax_log_like = plt.subplots(figsize=(10, 6))
-    for i in range(nwalkers):
-        ax_log_like.plot(np.arange(0, log_like_samples.shape[0]), log_like_samples[:,0,i], label=f"Walker {i+1}", color=colors[i], alpha=0.6, linewidth=0.8)
-
-    ax_log_like.axhline(analysis.calculate_time_frequency_likelihood(*parameters, waveform_kwargs=waveform_kwargs)  , 
-                color='red', linestyle='--', linewidth=1.2, label="Likelihood of Injection Parameters")
-
-    ax_log_like.set_title("Log-likelihood samples")
-    ax_log_like.set_xlabel("Number of steps")
-    ax_log_like.set_ylabel("Log-likelihood")
-    ax_log_like.set_xlim(0, nsteps-1)
-    fig_log_like.savefig("mcmc_results/mcmc_log_likelihood.png", dpi=300)
 
 if __name__ == "__main__":
     main()
