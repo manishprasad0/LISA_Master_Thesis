@@ -38,6 +38,23 @@ class   TimeFreqLikelihood:
         data_t_truncated = self.data_t[:, :cutoff_index]
         self.data_t = data_t_truncated
     
+    def pre_merger_SNR(
+        self,
+    ):
+        """
+        Calculate the SNR of the pre-merger data. data_t is already truncated to pre-merger.
+        """
+        frequencies_premerger = np.fft.rfftfreq(self.data_t.shape[-1], self.dt)
+        df_premerger = frequencies_premerger[1] - frequencies_premerger[0]
+        frequencies_premerger[0] = frequencies_premerger[1]
+        
+        sens_mat_premerger = AE1SensitivityMatrix(frequencies_premerger)
+        data_f_truncated = np.fft.rfft(self.data_t, axis=-1)
+        
+        hh = np.sum(np.abs(data_f_truncated)**2 / sens_mat_premerger.sens_mat) * 4.0 * df_premerger
+
+        print(np.sqrt(hh))
+
     def get_stft_of_data(self, include_sens_kwargs=False):
         """
         Calculate the Short-Time Fourier Transform (STFT) of the data and set up the frequency and time arrays.
