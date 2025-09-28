@@ -158,9 +158,9 @@ class MBHB_finder_time_frequency:
 
 
     def get_stft_of_data(self, include_sens_kwargs=False):
-        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
-        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
-        
+        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg, noverlap=0)
+        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg, noverlap=0)
+
         self.f = f
         self.df = f[1] - f[0]  # frequency bin width
         self.f[0] = self.f[1]  # set the first frequency to the second frequency to avoid division by zero
@@ -204,8 +204,8 @@ class MBHB_finder_time_frequency:
             template_t = template_t[:, :self.cutoff_index]
         
         # Calculate the STFT of the template and calculate the inner products
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg, noverlap=0)[2]
+        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg, noverlap=0)[2]
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
 
@@ -235,8 +235,8 @@ class MBHB_finder_time_frequency:
             template_t = template_t[:, :self.cutoff_index]
 
         # Calculate the STFT of the template
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg, noverlap=0)[2]
+        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg, noverlap=0)[2]
 
         # Calculate the inner product for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
@@ -288,8 +288,8 @@ class MBHB_finder_time_frequency:
             template_t = template_t[:, :self.cutoff_index]
 
         # Calculate the STFT of the template
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg, noverlap=0)[2]
+        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg, noverlap=0)[2]
         #print("Time to calculate STFT of template:", time.time() - start_time)
         # Calculate the inner products for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)

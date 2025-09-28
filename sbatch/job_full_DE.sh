@@ -9,11 +9,8 @@
 source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_env
 
-echo "RUN 3 : FIXED T_REF"
+echo "14 HOURS BEFORE MERGER : 5"
 echo "maxiter = 1500"
-echo "DE_find_tref.py = 1 month, 60 deg, 20 deg"
-echo "actually stefan's kwargs"
-echo "cpus-per-task=32, mem-per-cpu=3G, workers=3"
-echo "nperseg = 1414, reduced observation time to 1 month" 
+echo "DE_full.py"
 
 python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/DE_full.py

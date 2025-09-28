@@ -3,13 +3,14 @@
 #SBATCH --account=root
 #SBATCH --time=1-00:00:00            
 #SBATCH --partition=normal           
-#SBATCH --cpus-per-task=32          
+#SBATCH --cpus-per-task=24          
 #SBATCH --mem-per-cpu=3G       # The fastest. see the output slurm-51901. It went to 1500 iters
 
 source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_env
 
-echo "1000 steps"
-echo "perturbation = 1e-3"
+echo "1500 steps"
+echo "4 temps"
+echo "perturbation = 0.02"
 
 python -u /users/prasadm/LISA_Master_Thesis/mcmc.py

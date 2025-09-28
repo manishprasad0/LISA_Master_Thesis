@@ -30,7 +30,7 @@ print(f"RAM Usage: {mem.percent}%")
 print("Number of CPU cores:", mp.cpu_count())
 
 def main():
-    Tobs = 1.2*(YRSID_SI/12)
+    Tobs = 1.5*(YRSID_SI/12)
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
 
@@ -39,15 +39,15 @@ def main():
 
     m1 = 3e5
     m2 = 1.5e5
-    a1 = 0.753
-    a2 = 0.621
-    dist = 10 * PC_SI * 1e9
-    phi_ref = 0.0 #np.pi/2
+    a1 = 0.2
+    a2 = 0.4
+    dist = 8 * PC_SI * 1e9
+    phi_ref = np.pi/2
     f_ref = 0.0
-    inc = 0.224
-    lam = 60*(np.pi/180)
-    beta = 20*(np.pi/180)
-    psi = 0
+    inc = np.pi/3
+    lam = np.pi
+    beta = np.pi/4
+    psi = np.pi/4
     t_ref = Tobs - (24*60*60)
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
     modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
@@ -58,7 +58,7 @@ def main():
     print("The SNR of the signal is", sim.SNR_optimal()[0])
 
     # Pre-merger settings
-    hours_before_merger = 10
+    hours_before_merger = 14
     time_before_merger = hours_before_merger*60*60
     cutoff_time = t_ref - time_before_merger
     width_of_tref_prior = 20
@@ -95,13 +95,14 @@ def main():
     parameter_names = list(boundaries.keys())
     variable_parameter_names = [name for name in parameter_names if name not in fixed_parameters]
     bounds = np.array([boundaries[name] for name in variable_parameter_names])
-    t_ref_found = 0.400195
+    t_ref_found = 0.418387
+    print("Using t_ref_found =", t_ref_found)
     random_sample = np.random.uniform(size=bounds.shape[0])  # shape (n_parameters,)
     x0 = random_sample * (bounds[:,1] - bounds[:,0]) + bounds[:,0]
     x0[-1] = t_ref_found
 
     differential_evolution_kwargs = {
-        'strategy': 'best1exp',
+        'strategy': 'best1bin',
         'popsize': 15,
         'tol': 1e-8,
         'maxiter': 1500,
@@ -162,14 +163,16 @@ def main():
     
     found_tref = transform_parameters_to_bbhx(found_parameters_tf, cutoff_time=cutoff_time)[-1]
     print(found_tref, t_ref, found_tref - t_ref)
-
+    
+    print("Results:", results_tf)
+    
     save_de_results(
         found_parameters_tf,
         found_snr_found_tf,
         true_snr,
         results_tf,
         parameters_history_tf,
-        folder_name="differential_evolution/differential_evolution_results",
+        folder_name="differential_evolution/differential_evolution_results/different_inputs",
         filename_prefix="tf_run"
     )
     

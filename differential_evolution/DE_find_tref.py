@@ -30,7 +30,7 @@ print(f"RAM Usage: {mem.percent}%")
 print("Number of CPU cores:", mp.cpu_count())
 
 def main():
-    Tobs = 1.2*(YRSID_SI/12)
+    Tobs = 1.5*(YRSID_SI/12)
     dt = 5.
     include_T_channel = False # Set to True if you want to include the T channel in the simulation, otherwise only A and E channels will be included.
 
@@ -39,16 +39,17 @@ def main():
 
     m1 = 3e5
     m2 = 1.5e5
-    a1 = 0.753
-    a2 = 0.621
-    dist = 10 * PC_SI * 1e9
-    phi_ref = 0.0 #np.pi/2
+    a1 = 0.2
+    a2 = 0.4
+    dist = 8 * PC_SI * 1e9
+    phi_ref = np.pi/2
     f_ref = 0.0
-    inc = 0.224
-    lam = 60*(np.pi/180)
-    beta = 20*(np.pi/180)
-    psi = 0
+    inc = np.pi/3
+    lam = np.pi
+    beta = np.pi/4
+    psi = np.pi/4
     t_ref = Tobs - (24*60*60)
+
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
     modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
     waveform_kwargs = dict(length=1024, direct=False, fill=True, squeeze=False, modes=modes)
@@ -58,7 +59,7 @@ def main():
     print("The SNR of the signal is", sim.SNR_optimal()[0])
 
     # Pre-merger settings
-    hours_before_merger = 15
+    hours_before_merger = 10
     time_before_merger = hours_before_merger*60*60
     cutoff_time = t_ref - time_before_merger
     width_of_tref_prior = 20
@@ -91,12 +92,12 @@ def main():
     nperseg = 1414
 
     differential_evolution_kwargs = {
-        'strategy': 'rand1exp',     # good default; 'best1exp' can converge faster but risks premature convergence
+        'strategy': 'best1exp',     # good default; 'best1exp' can converge faster but risks premature convergence
         'popsize': 15,              # decent; you could try 20 if evaluations are cheap, more diversity
-        'tol': 1e-6,                # loosen a bit; 1e-8 is *very* strict and often wastes iterations
-        'maxiter': 100,            # give it more room for global exploration
-        'recombination': 0.6,       # lower than 1.0 usually helps maintain diversity
-        'mutation': (0.5, 0.8),     # broader range → larger jumps for exploration
+        'tol': 1e-8,                # loosen a bit; 1e-8 is *very* strict and often wastes iterations
+        'maxiter': 1800,            # give it more room for global exploration
+        'recombination': 0.7,       # lower than 1.0 usually helps maintain diversity
+        'mutation': (0.5, 1.5),     # broader range → larger jumps for exploration
         'polish': True,             # yes, lets L-BFGS-B finish up
         'disp': True,               # monitor progress
         'workers': 3,               # parallelism, good
@@ -123,12 +124,12 @@ def main():
     }
 
     analysis = TimeFreqSNR(
-        data_t = data_t_truncated,
+        data_t = sim.signal_t[0],
         wave_gen=wave_gen,
         nperseg=nperseg,
         dt_full=dt,
         cutoff_index=cutoff_index,
-        pre_merger=True
+        pre_merger=False
     )
     analysis.get_stft_of_data()
     true_snr, amplitude = analysis.calculate_time_frequency_SNR(*parameters, waveform_kwargs=waveform_kwargs)
@@ -141,13 +142,13 @@ def main():
     # For full signal, use data_t =  sim.signal_t[0] , set pre_merger=False, and comment   cutoff_index = cutoff_index
     # For pre-merger,  use data_t =  data_t_truncated, set pre_merger=True , and uncomment cutoff_index = cutoff_index
     DifferentialEvolution_time_frequency = MBHB_finder_time_frequency(
-        data_t = data_t_truncated,
+        data_t = sim.signal_t[0],
         wave_gen= wave_gen,
         waveform_kwargs=waveform_kwargs,
         boundaries=boundaries,
         nperseg=nperseg,
         dt_full= dt,
-        pre_merger=True,
+        pre_merger=False,
         cutoff_index=cutoff_index,
         cutoff_time=cutoff_time,
         true_parameters=parameters,
@@ -164,7 +165,7 @@ def main():
     
     end_time = time.time()
     print(f"Differential evolution search completed in {end_time - start_time:.2f} seconds.")
-    
+    print("Results:", results_tf)
     print(DifferentialEvolution_time_frequency)
     
     found_tref = transform_parameters_to_bbhx(found_parameters_tf, cutoff_time=cutoff_time)[-1]
@@ -176,7 +177,7 @@ def main():
         true_snr,
         results_tf,
         parameters_history_tf,
-        folder_name="differential_evolution/differential_evolution_results",
+        folder_name="differential_evolution/differential_evolution_results/no_noise_full_signal",
         filename_prefix="tf_run"
     )
     
