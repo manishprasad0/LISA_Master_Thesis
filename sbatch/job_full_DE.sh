@@ -9,7 +9,6 @@
 source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_env
 
-echo "14 HOURS BEFORE MERGER : 5"
 echo "maxiter = 1500"
 echo "DE_full.py"
 

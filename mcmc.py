@@ -175,7 +175,7 @@ def main():
     found_parameters_DE = DE_to_MCMC_params(x0['found_parameters'], cutoff_time=cutoff_time)
     found_SNR = x0['found_snr']
     print("Parameters from Differential Evolution: ", found_parameters_DE)
-    found_parameters_DE[7] = found_parameters_DE[7] - 1
+
     print("SNR of DE result = ", found_SNR)
     print("Parameters from DE = ", found_parameters_DE)
     print("Found t_ref: ", found_parameters_DE[-1])

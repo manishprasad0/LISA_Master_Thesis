@@ -71,7 +71,7 @@ def main():
             return data_t_truncated, cutoff_index
 
     data_t_truncated, cutoff_index =  pre_merger(data_t, time_before_merger, t_ref, t_array)
-    #signal_t_truncated, cutoff_index =  pre_merger(sim.signal_t[0], time_before_merger, t_ref, t_array)
+    signal_t_truncated, cutoff_index =  pre_merger(sim.signal_t[0], time_before_merger, t_ref, t_array)
 
     # Differential Evolution Analysis
     boundaries = {}
@@ -95,7 +95,7 @@ def main():
     parameter_names = list(boundaries.keys())
     variable_parameter_names = [name for name in parameter_names if name not in fixed_parameters]
     bounds = np.array([boundaries[name] for name in variable_parameter_names])
-    t_ref_found = 0.418387
+    t_ref_found = 0.58122
     print("Using t_ref_found =", t_ref_found)
     random_sample = np.random.uniform(size=bounds.shape[0])  # shape (n_parameters,)
     x0 = random_sample * (bounds[:,1] - bounds[:,0]) + bounds[:,0]
@@ -116,12 +116,12 @@ def main():
     }
 
     analysis = TimeFreqSNR(
-        data_t = data_t_truncated,
+        data_t = sim.signal_t[0],
         wave_gen=wave_gen,
         nperseg=nperseg,
         dt_full=dt,
         cutoff_index=cutoff_index,
-        pre_merger=True
+        pre_merger=False
     )
 
     analysis.get_stft_of_data()
@@ -135,14 +135,14 @@ def main():
     # For full signal, use data_t =  sim.signal_t[0] , set pre_merger=False, and comment   cutoff_index = cutoff_index
     # For pre-merger,  use data_t =  data_t_truncated, set pre_merger=True , and uncomment cutoff_index = cutoff_index
     DifferentialEvolution_time_frequency = MBHB_finder_time_frequency(
-        data_t = data_t_truncated,
+        data_t = sim.signal_t[0],
         wave_gen= wave_gen,
         waveform_kwargs=waveform_kwargs,
         boundaries=boundaries,
         nperseg=nperseg,
         dt_full= dt,
-        pre_merger=True,
-        cutoff_index=cutoff_index,
+        pre_merger=False,
+        #cutoff_index=cutoff_index,
         cutoff_time=cutoff_time,
         true_parameters=parameters,
     )
