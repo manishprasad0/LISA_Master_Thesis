@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
 import scipy as sp
+from cupyx.scipy import signal
 from lisatools.sensitivity  import SensitivityMatrix, AET1SensitivityMatrix, get_sensitivity, AE1SensitivityMatrix
 from lisatools.analysiscontainer import AnalysisContainer
 from lisatools.datacontainer import DataResidualArray
@@ -69,8 +70,8 @@ def template_snr_lisatools(data, template, sens_mat, freq):
 
 def SNR_optimal_lisatools(self):
         SNR = []
-        for signal in self.signal_f:
-            data = DataResidualArray(signal, f_arr=self.freq)
+        for signal_var in self.signal_f:
+            data = DataResidualArray(signal_var, f_arr=self.freq)
             analysis = AnalysisContainer(data_res_arr=data, sens_mat=self.sens_mat)
             SNR.append(analysis.snr())
         SNR = np.array(SNR)
@@ -88,8 +89,8 @@ def inner_product_time_frequency(signal_1, signal_2, sens_mat, df, nperseg):
     - ip: The inner product of the two signals, weighted by the sensitivity matrix.
     """
 
-    f_1, t_1, Z_1 = sp.signal.stft(signal_1, fs=df, nperseg=nperseg*df)
-    f_2, t_2, Z_2 = sp.signal.stft(signal_2, fs=df, nperseg=nperseg*df)
+    f_1, t_1, Z_1 = signal.stft(signal_1, fs=df, nperseg=nperseg*df)
+    f_2, t_2, Z_2 = signal.stft(signal_2, fs=df, nperseg=nperseg*df)
 
 
 
@@ -120,9 +121,9 @@ class TimeFreqSNR:
         - dt: Time step for the data, default is 5.0 seconds. Different from self.dt which is the time step for the STFT.
         - include_sens_kwargs: If True, include sensitivity matrix parameters in the sensitivity matrix calculation.
         """
-        
-        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
-        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
+        print(type(self.data_t), type(self.dt_full), type(self.nperseg))
+        f, t, Zxx_data_A = signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
+        f, t, Zxx_data_E = signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
         
         self.f = f
         self.df = f[1] - f[0]  # frequency bin width
@@ -166,8 +167,8 @@ class TimeFreqSNR:
             # Truncate the template to the same length as the data
             template_t = template_t[:, :self.cutoff_index]
 
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_A = signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_E = signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
 
         # Calculate the inner product for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)

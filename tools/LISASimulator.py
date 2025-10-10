@@ -1,4 +1,9 @@
-import numpy as np
+gpu = True
+if gpu:
+    import cupy as np
+else:
+    import numpy as np
+
 import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
