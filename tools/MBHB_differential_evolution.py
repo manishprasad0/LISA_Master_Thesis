@@ -111,7 +111,7 @@ class MBHB_finder_time_frequency:
 
         # Use multiple columns for multiple runs
         if hasattr(self, "found_parameters_11_all"):
-            num_runs = self.found_parameters_11_all.shape[0]
+            num_runs = 1
 
             # Header
             header = f"{'Index':<5} {'Parameter':<25} {'Lower Bound':<15}"
@@ -330,8 +330,6 @@ class MBHB_finder_time_frequency:
 
         self.history = [] 
         
-        initial_guess_without_distance = np.random.uniform(low=bounds[:, 0], high=bounds[:, 1])
-
         #time_start = time.time()
         #SNR = self.calculate_time_frequency_SNR_without_distance(variable_parameters=initial_guess_without_distance, fixed_parameters=fixed_parameters)
         #print('time SNR ',np.round(time.time() - time_start,2))
@@ -341,7 +339,6 @@ class MBHB_finder_time_frequency:
         
         results = sp.optimize.differential_evolution(self.calculate_time_frequency_SNR_without_distance,    # The function only takes 10 parameters (all except dL & f_ref)
                                                     bounds=bounds.get(),                                          # Bounds for the 10 parameters (all except dL & f_ref)
-                                                    #x0=initial_guess_without_distance,                      # Initial guess for the 10 parameters (all except dL & f_ref) 
                                                     args=(fixed_parameters,),
                                                     **differential_evolution_kwargs,                        # Additional keyword arguments for the differential evolution algorithm
                                                     callback=self.callback,   # <--- here
@@ -373,6 +370,10 @@ class MBHB_finder_time_frequency:
         found_parameters_11_all.append(found_parameters_11)
         SNR_all.append(self.calculate_time_frequency_SNR_with_distance(found_parameters_11))                 # function calculate_time_frequency_SNR_with_distance does not multiply the SNR by -
 
+        self.found_parameters_11_all = np.array(found_parameters_11_all)
+        self.SNR_all = np.array(SNR_all)
+        self.found_parameters_11_max = found_parameters_11
+        self.SNR_max = SNR_all[0]
 
         return found_parameters_11, SNR_all, results, parameters_history
     

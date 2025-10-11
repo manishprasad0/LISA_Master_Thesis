@@ -1,4 +1,6 @@
-import numpy as np
+import cupy as np
+from cupyx.scipy import signal
+
 import matplotlib.pyplot as plt
 from scipy.signal.windows import hann
 from scipy.signal import welch
@@ -32,7 +34,7 @@ class TimeFreqLikelihood:
         self.time_before_merger = time_before_merger
 
         cutoff_time = t_ref - time_before_merger
-        cutoff_index = np.searchsorted(t_array, cutoff_time)
+        cutoff_index = np.searchsorted(t_array, np.asarray(cutoff_time))
         self.cutoff_index = cutoff_index
 
         data_t_truncated = self.data_t[:, :cutoff_index]
@@ -46,8 +48,8 @@ class TimeFreqLikelihood:
         - include_sens_kwargs: If True, include sensitivity matrix parameters in the sensitivity matrix calculation.
         """
         
-        f, t, Zxx_data_A = sp.signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
-        f, t, Zxx_data_E = sp.signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
+        f, t, Zxx_data_A = signal.stft(self.data_t[0], fs=1/self.dt_full, nperseg=self.nperseg)
+        f, t, Zxx_data_E = signal.stft(self.data_t[1], fs=1/self.dt_full, nperseg=self.nperseg)
         
         self.f = f
         self.df = f[1] - f[0]  # frequency bin width
@@ -101,13 +103,14 @@ class TimeFreqLikelihood:
             # Truncate the template to the same length as the data
             template_t = template_t[:, :self.cutoff_index]
 
-        Zxx_temp_A = sp.signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
-        Zxx_temp_E = sp.signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_A = signal.stft(template_t[0], fs=1/self.dt, nperseg=self.nperseg)[2]
+        Zxx_temp_E = signal.stft(template_t[1], fs=1/self.dt, nperseg=self.nperseg)[2]
 
         # Calculate the inner product for A and E channels
         hh = self.get_hh(Zxx_temp_A, Zxx_temp_E)
         dh = self.get_dh(Zxx_temp_A, Zxx_temp_E)
-        return (dh - hh / 2.0 - self.dd / 2.0) * self.dt
+
+        return ((dh - hh / 2.0 - self.dd / 2.0) * self.dt).get()
 
     def plot_spectrogram(self, max_freq = 0.1, min_freq = 1e-4):
 
