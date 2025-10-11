@@ -5,6 +5,7 @@ parent_dir = os.path.abspath(os.path.join(script_dir, ".."))
 sys.path.append(parent_dir)
 
 import numpy as np
+import cupy as cp
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import multiprocessing as mp
@@ -19,13 +20,13 @@ from bbhx.waveformbuild import BBHWaveformFD
 
 # Immports for generating simulated LISA data
 import noise_generation as noise_generation
-from tools.LISASimulator import LISASimulator
-from tools.likelihood import get_dh, get_hh
-import tools.likelihood as likelihood
+from tools.LISASimulator_GPU import LISASimulator
+from tools.likelihood_GPU import get_dh, get_hh, TimeFreqSNR
+import tools.likelihood_GPU as likelihood
 
 # Imports for MCMC
 from tools.save_and_load_DE import load_de_results
-from tools.time_freq_likelihood import TimeFreqLikelihood
+from tools.time_freq_likelihood_GPU import TimeFreqLikelihood
 from eryn.ensemble import EnsembleSampler
 from eryn.prior import ProbDistContainer, uniform_dist
 from eryn.state import State
@@ -37,24 +38,24 @@ import pandas as pd
 
 
 def main():
-    Tobs = 1.5*(YRSID_SI/12)
+    Tobs = 1.2*(YRSID_SI/12)
     dt = 5.
     include_T_channel = False
 
-    wave_gen = BBHWaveformFD(amp_phase_kwargs=dict(run_phenomd=False), use_gpu=False)
+    wave_gen = BBHWaveformFD(amp_phase_kwargs=dict(run_phenomd=False), force_backend="cuda12x",)
     sim = LISASimulator(Tobs=Tobs, dt=dt, wave_gen=wave_gen, include_T_channel=include_T_channel)
 
     m1 = 3e5
     m2 = 1.5e5
-    a1 = 0.2
-    a2 = 0.4
-    dist = 8 * PC_SI * 1e9
-    phi_ref = np.pi/2
+    a1 = 0.753
+    a2 = 0.621
+    dist = 10 * PC_SI * 1e9
+    phi_ref = 0.0 #np.pi/2
     f_ref = 0.0
-    inc = np.pi/3
-    lam = np.pi
-    beta = np.pi/4
-    psi = np.pi/4
+    inc = 0.224
+    lam = 60*(np.pi/180)
+    beta = 20*(np.pi/180)
+    psi = 0
     t_ref = Tobs - (24*60*60)
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
     modes = [(2,2), (2,1), (3,3), (3,2), (4,4), (4,3)]
@@ -83,7 +84,7 @@ def main():
     ntemps = 4
     ndims = 11
     nleaves_max = 1
-    nsteps = 1500
+    nsteps = 4000
 
     param_labels = [
         r"$M_T \, [\mathrm{M_\odot}]$",
@@ -134,7 +135,7 @@ def main():
         1 : uniform_dist(0.01, 0.99),                # q = m2/m1
         2 : uniform_dist(-1, +1),                    # a1
         3 : uniform_dist(-1, +1),                    # a2
-        4 : uniform_dist(1, 50),                     # dist in Mpc
+        4 : uniform_dist(1, 1000),                     # dist in Gpc
         5 : uniform_dist(0, 2*np.pi),                # phi_ref
         6 : uniform_dist(-1, 1),                     # cos(inc)
         7 : uniform_dist(0.0, 2 * np.pi),            # lam
@@ -171,14 +172,8 @@ def main():
         return np.array([mT_exp, q, a1, a2, dist_Mpc, phi_ref, cos_inc, lam, sin_beta, psi, time_to_coalescence])
         
         
-    x0 = load_de_results(filepath='differential_evolution/differential_evolution_results/different_inputs/tf_run_20250924_044928.npz')
-    found_parameters_DE = DE_to_MCMC_params(x0['found_parameters'], cutoff_time=cutoff_time)
-    found_SNR = x0['found_snr']
-    print("Parameters from Differential Evolution: ", found_parameters_DE)
-    print("SNR of DE result = ", found_SNR)
-    print("Parameters from DE = ", found_parameters_DE)
-    print("Found t_ref: ", found_parameters_DE[-1])
-    print("True  t_ref: ", injection_parameters[-1])
+    x0 = np.array([13.0165, 0.501283, 0.650153, 0.871754, 10.0336, 2.27851, 0.97478,  1.04851, 0.337238, 1.95062, 0.416537])
+    found_parameters_DE = DE_to_MCMC_params(x0, cutoff_time=cutoff_time)
 
     starting_points = np.zeros(shape=[ntemps, nwalkers, nleaves_max, found_parameters_DE.shape[0]])
 
@@ -210,14 +205,16 @@ def main():
     print(f"MCMC with {nsteps} steps took {end_time - start_time:.2f} seconds")
     
     mcmc_results = sampler.get_chain()["mbh"]
+    print("MCMC results shape:", mcmc_results.shape)
 
-    np.save(f"mcmc_results/different_inputs/mcmc_different_inputs_1500_4temps.npy", mcmc_results)
-    print(f"MCMC results saved to mcmc_results/different_inputs/mcmc_different_inputs_1500_4temps_new.npy")
+
+    np.save(f"mcmc_results_GPU/original_inputs/mcmc_original_inputs_4000_002.npy", mcmc_results)
+    print(f"MCMC results saved to mcmc_results_GPU/original_inputs/mcmc_original_inputs_4000_002.npy")
 
 
     log_like_samples = sampler.get_log_like() 
-    np.save(f"mcmc_results/different_inputs/mcmc_loglike_different_inputs_1500_4temps.npy", log_like_samples)
-    print(f"Log-likelihood samples saved to mcmc_results/different_inputs/mcmc_loglike_different_inputs_1500_4temps_new.npy")
+    np.save(f"mcmc_results_GPU/original_inputs/mcmc_loglike_original_inputs_4000_002.npy", log_like_samples)
+    print(f"Log-likelihood samples saved to mcmc_results_GPU/original_inputs/mcmc_loglike_original_inputs_4000_002.npy")
 
 
 if __name__ == "__main__":
