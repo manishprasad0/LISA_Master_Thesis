@@ -38,7 +38,8 @@ import pandas as pd
 
 
 def main():
-    Tobs = 1.2*(YRSID_SI/12)
+    # Tobs = 1.2*(YRSID_SI/12)
+    Tobs = 1.5*(YRSID_SI/12)
     dt = 5.
     include_T_channel = False
 
@@ -66,7 +67,9 @@ def main():
     print("The SNR of the signal is", sim.SNR_optimal()[0])
 
     # Pre-merger settings
-    hours_before_merger = 10
+    # hours_before_merger = 10
+    
+    hours_before_merger = 14
     time_before_merger = hours_before_merger*60*60
     cutoff_time = t_ref - time_before_merger
     width_of_tref_prior = 20
@@ -84,7 +87,7 @@ def main():
     ntemps = 4
     ndims = 11
     nleaves_max = 1
-    nsteps = 4000
+    nsteps = 2000
 
     param_labels = [
         r"$M_T \, [\mathrm{M_\odot}]$",
@@ -172,7 +175,9 @@ def main():
         return np.array([mT_exp, q, a1, a2, dist_Mpc, phi_ref, cos_inc, lam, sin_beta, psi, time_to_coalescence])
         
         
-    x0 = np.array([13.0165, 0.501283, 0.650153, 0.871754, 10.0336, 2.27851, 0.97478,  1.04851, 0.337238, 1.95062, 0.416537])
+    # x0 = np.array([13.0165, 0.501283, 0.650153, 0.871754, 10.0336, 2.27851, 0.97478,  1.04851, 0.337238, 1.95062, 0.416537])
+    
+    x0 = np.array([13.0442, 0.480049, 0.820059, 0.262087, 9.93484, 4.12773, 0.971511, 0.843206, 0.390985, 2.12432, 0.577044])
     found_parameters_DE = DE_to_MCMC_params(x0, cutoff_time=cutoff_time)
 
     starting_points = np.zeros(shape=[ntemps, nwalkers, nleaves_max, found_parameters_DE.shape[0]])
@@ -208,13 +213,13 @@ def main():
     print("MCMC results shape:", mcmc_results.shape)
 
 
-    np.save(f"mcmc_results_GPU/original_inputs/mcmc_original_inputs_4000_002.npy", mcmc_results)
-    print(f"MCMC results saved to mcmc_results_GPU/original_inputs/mcmc_original_inputs_4000_002.npy")
+    np.save(f"mcmc_results_GPU/original_inputs/mcmc_14hours_2000_002.npy", mcmc_results)
+    print(f"MCMC results saved to mcmc_results_GPU/original_inputs/mcmc_14hours_2000_002.npy")
 
 
-    log_like_samples = sampler.get_log_like() 
-    np.save(f"mcmc_results_GPU/original_inputs/mcmc_loglike_original_inputs_4000_002.npy", log_like_samples)
-    print(f"Log-likelihood samples saved to mcmc_results_GPU/original_inputs/mcmc_loglike_original_inputs_4000_002.npy")
+    log_like_samples = sampler.get_log_like()
+    np.save(f"mcmc_results_GPU/original_inputs/mcmc_loglike_14hours_2000_002.npy", log_like_samples)
+    print(f"Log-likelihood samples saved to mcmc_results_GPU/original_inputs/mcmc_loglike_14hours_2000_002.npy")
 
 
 if __name__ == "__main__":

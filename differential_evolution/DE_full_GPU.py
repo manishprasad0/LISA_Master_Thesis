@@ -39,8 +39,8 @@ def main():
     wave_gen = BBHWaveformFD(amp_phase_kwargs=dict(run_phenomd=False), force_backend="cuda12x",)
     sim = LISASimulator(Tobs=Tobs, dt=dt, wave_gen=wave_gen, include_T_channel=include_T_channel)
 
-    m1 = 1e5
-    m2 = 1e5
+    m1 = 2e5
+    m2 = 0.5e5
     a1 = 0
     a2 = 0
     dist = 5 * PC_SI * 1e9 #dist = 27.7 * PC_SI * 1e9
@@ -79,7 +79,7 @@ def main():
     # Differential Evolution Analysis
     boundaries = {}
     boundaries['Total_Mass'] = [np.log(1e5), np.log(1e6)]   
-    boundaries['Mass_Ratio'] = [0.05, 0.99]
+    boundaries['Mass_Ratio'] = [0, 1]
     boundaries['Spin1'] = [-1, 1]
     boundaries['Spin2'] = [-1, 1]   
     boundaries['Distance'] = [1, 1000] # in GPc i.e. dL / (PC_SI * 1e9)
