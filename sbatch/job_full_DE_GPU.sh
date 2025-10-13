@@ -9,7 +9,7 @@
 source /users/prasadm/miniconda3/etc/profile.d/conda.sh
 conda activate lisa_gpu
 
-echo "maxiter = 1500"
+echo "COMPLETELY NEW PARAMETERS!!!!"
 echo "DE_full_GPU.py"
 
 python -u /users/prasadm/LISA_Master_Thesis/differential_evolution/DE_full_GPU.py

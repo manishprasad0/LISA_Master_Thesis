@@ -40,16 +40,16 @@ def main():
     sim = LISASimulator(Tobs=Tobs, dt=dt, wave_gen=wave_gen, include_T_channel=include_T_channel)
 
     m1 = 2e5
-    m2 = 0.5e5
-    a1 = 0
-    a2 = 0
-    dist = 5 * PC_SI * 1e9 #dist = 27.7 * PC_SI * 1e9
-    phi_ref = 2.66
+    m2 = 1e5
+    a1 = 0.2
+    a2 = 0.4
+    dist = 6.6 * PC_SI * 1e9
+    phi_ref = 0.80 #np.pi/2
     f_ref = 0.0
-    inc = 0.924
-    lam = 3.45
-    beta= 0.44
-    psi = 3.42
+    inc = 0.224
+    lam = 1.51
+    beta = -0.17
+    psi = 1.37
     t_ref = Tobs - (24*60*60)
 
     parameters = np.array([m1, m2, a1, a2, dist, phi_ref, f_ref, inc, lam, beta, psi, t_ref])
@@ -176,7 +176,7 @@ def main():
         true_snr.get(),
         results_tf,
         parameters_history_tf,
-        folder_name="DE_GPU_output/research_paper_modified",
+        folder_name="DE_GPU_output/MY_NEW_PARAMETERS",
         filename_prefix="tf_run"
     )
     
