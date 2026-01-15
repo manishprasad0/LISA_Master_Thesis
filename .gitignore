@@ -12,3 +12,12 @@ slurm-*
 differential_evolution/differential_evolution_results
 mcmc_results
 thesis_figures
+LISA_Master_Thesis_BRISTEN
+*.fits
+*.pdf
+**.pdf
+*/*.pdf
+**/**.pdf
+
+*.png
+*.jpg
